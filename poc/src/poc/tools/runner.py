@@ -4,10 +4,13 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
+from poc.tools.safe import tool_guard
+
 WORKSPACE = Path(__file__).resolve().parents[3] / "workspace"
 
 
 @tool
+@tool_guard
 def run_python(script: str, argv: str = "") -> str:
     """执行 workspace 内的白名单 Python 脚本（如 tools/financial_rigor.py）。argv 为空格分隔参数。"""
     script_path = (WORKSPACE / script).resolve()
