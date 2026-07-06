@@ -1,9 +1,30 @@
 import httpx
+import pytest
 import respx
 
 from poc.tools.runner import run_python
+from poc.tools.stock import _sina_symbol
 from poc.tools.web import BOCHA_ENDPOINT, fetch_page, web_search
 from poc.tools import web as web_mod
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("920982", "bj920982"),  # 北交所 92 开头
+        ("830799", "bj830799"),  # 北交所历史 8 开头
+        ("430047", "bj430047"),  # 北交所历史 4 开头
+        ("600519", "sh600519"),  # 沪市主板
+        ("900901", "sh900901"),  # 沪市 B 股（9 开头但非 92）
+        ("000001", "sz000001"),  # 深市主板
+        ("300750", "sz300750"),  # 创业板
+        ("200011", "sz200011"),  # 深市 B 股 2 开头
+        ("sh600519", "sh600519"),  # 已带前缀原样返回
+        ("BJ920982", "bj920982"),  # 大小写 + 前缀
+    ],
+)
+def test_sina_symbol(code, expected):
+    assert _sina_symbol(code) == expected
 
 
 @respx.mock

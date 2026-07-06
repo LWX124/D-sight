@@ -1,4 +1,4 @@
-import os
+import pytest
 
 from poc.agent import SYSTEM_PROMPT, build_agent
 
@@ -7,6 +7,12 @@ def test_build_agent_compiles(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-dummy")
     agent = build_agent()
     assert hasattr(agent, "stream") and hasattr(agent, "invoke")
+
+
+def test_build_agent_rejects_unknown_model(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-dummy")
+    with pytest.raises(ValueError):
+        build_agent(model_name="deepseek-chat")
 
 
 def test_system_prompt_has_guardrails():

@@ -1,3 +1,4 @@
+import datetime
 import os
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from poc.tools.stock import stock_financials, stock_quote
 from poc.tools.web import fetch_page, web_search
 
 WORKSPACE = Path(__file__).resolve().parents[2] / "workspace"
+
+ALLOWED_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
 
 SYSTEM_PROMPT = """你是 D-sight 投研助手，服务中文投资者。
 
@@ -26,17 +29,28 @@ skill 指定的交叉验证步骤（如 tools/financial_rigor.py）必须用 run
 
 def build_agent(model_name: str | None = None):
     load_dotenv()
+    name = model_name or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    if name not in ALLOWED_MODELS:
+        raise ValueError(
+            f"不允许的模型 ID：{name}，只能用 {sorted(ALLOWED_MODELS)}"
+        )
     model = ChatDeepSeek(
-        model=model_name or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
+        model=name,
         api_key=os.environ["DEEPSEEK_API_KEY"],
         timeout=120,
         max_retries=3,
     )
-    backend = FilesystemBackend(root_dir=str(WORKSPACE), virtual_mode=False)
+    # virtual_mode=True 把所有路径锚定到 root_dir，阻断绝对路径 / `..` 逃逸；
+    # 因此 skills 源路径改用根相对形式 "/skills"（即 WORKSPACE/skills）。
+    backend = FilesystemBackend(root_dir=str(WORKSPACE), virtual_mode=True)
+    system_prompt = (
+        SYSTEM_PROMPT
+        + f"\n当前日期：{datetime.date.today().isoformat()}（做时效判断时以此为准）"
+    )
     return create_deep_agent(
         model=model,
         tools=[web_search, fetch_page, stock_quote, stock_financials, run_python],
         backend=backend,
-        skills=[str(WORKSPACE / "skills")],
-        system_prompt=SYSTEM_PROMPT,
+        skills=["/skills"],
+        system_prompt=system_prompt,
     )

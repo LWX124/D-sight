@@ -1,7 +1,6 @@
 """把 ai-berkshire 的 skill md 转成 Agent Skills 规范（SKILL.md + frontmatter）工作区。"""
 from __future__ import annotations
 
-import re
 import shutil
 from pathlib import Path
 

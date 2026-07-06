@@ -18,8 +18,8 @@ def render(msg) -> None:
 def main() -> None:
     question = " ".join(sys.argv[1:]) or "分析贵州茅台（600519）的投资价值"
     console.print(f"[bold]问题：{question}[/bold]\n")
-    agent = build_agent()
     try:
+        agent = build_agent()
         for chunk in agent.stream(
             {"messages": [{"role": "user", "content": question}]},
             config={"recursion_limit": 200},

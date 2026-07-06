@@ -11,12 +11,14 @@ def _sina_symbol(symbol: str) -> str:
         if code.startswith(prefix):
             return code
     code = code.zfill(6)
+    # 北交所：92 开头（及历史 4/8 开头）→ bj；必须在 9→sh 之前判断，
+    # 否则 900xxx 沪市 B 股会被误判。
+    if code.startswith("92") or code[0] in ("4", "8"):
+        return f"bj{code}"
     if code[0] in ("6", "9"):
         return f"sh{code}"
     if code[0] in ("0", "2", "3"):
         return f"sz{code}"
-    if code[0] in ("4", "8"):
-        return f"bj{code}"
     return f"sh{code}"
 
 
