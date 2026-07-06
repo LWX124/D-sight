@@ -10,9 +10,12 @@ BOCHA_ENDPOINT = "https://api.bochaai.com/v1/web-search"
 @tool
 def web_search(query: str, count: int = 8) -> str:
     """联网搜索，返回标题/链接/摘要。用于收集新闻、研报、财务数据线索、多空观点。"""
+    api_key = os.environ.get("BOCHA_API_KEY")
+    if not api_key:
+        return "错误：搜索服务未配置（缺少 BOCHA_API_KEY），请改用其他工具（如 stock_quote/stock_financials/fetch_page）或告知用户此题需要联网搜索。"
     resp = httpx.post(
         BOCHA_ENDPOINT,
-        headers={"Authorization": f"Bearer {os.environ['BOCHA_API_KEY']}"},
+        headers={"Authorization": f"Bearer {api_key}"},
         json={"query": query, "count": count, "summary": True},
         timeout=30,
     )

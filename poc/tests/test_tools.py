@@ -38,6 +38,12 @@ def test_fetch_page_extracts_text():
     assert "贵州茅台" in out
 
 
+def test_web_search_degrades_without_key(monkeypatch):
+    monkeypatch.delenv("BOCHA_API_KEY", raising=False)
+    out = web_search.invoke({"query": "任意"})
+    assert out.startswith("错误：搜索服务未配置")
+
+
 def test_run_python_rejects_escape():
     out = run_python.invoke({"script": "../../etc/passwd"})
     assert out.startswith("错误")
