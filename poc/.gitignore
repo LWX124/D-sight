@@ -1,3 +1,4 @@
 .env
 workspace/
 __pycache__/
+eval/logs/
