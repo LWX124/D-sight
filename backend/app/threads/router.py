@@ -1,12 +1,13 @@
 import datetime as dt
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.auth.models import User
+from app.chat.history import load_thread_messages
 from app.core.db import get_db
 from app.threads.models import Thread
 from app.threads.schemas import ThreadCreateIn, ThreadOut, ThreadPatchIn
@@ -52,6 +53,24 @@ async def list_threads(
         .order_by(Thread.updated_at.desc())
     )
     return [_out(t) for t in rows]
+
+
+@router.get("/{thread_id}/messages")
+async def get_thread_messages(
+    thread_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """刷新后恢复聊天：读该 thread 最新 checkpoint 的 human/ai 文本轮。
+
+    归属校验复用 _owned_thread（非本人/已删/非法 id → 404）。checkpointer 从
+    app.state 取（未跑 lifespan 的进程为 None → 空历史，本就无跨会话历史）。
+    """
+    await _owned_thread(db, user, thread_id)
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    messages = await load_thread_messages(thread_id, checkpointer)
+    return {"messages": messages}
 
 
 @router.patch("/{thread_id}")

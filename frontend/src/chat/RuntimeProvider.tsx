@@ -4,7 +4,7 @@
 //  3) body 携带 threadId（由 props 传入；threadId 变化时上层用 key 重建 runtime）
 //  4) 无前端工具（去掉 toolkit/Tools 相关代码）
 // converter 与 LangChainMessageConverter 保留官方语义：state.messages + pendingCommands 乐观更新。
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
   useAssistantTransportRuntime,
@@ -14,7 +14,7 @@ import {
   convertLangChainMessages,
   type LangChainMessage,
 } from "@assistant-ui/react-langgraph";
-import { useAuthStore } from "@/lib/auth";
+import { ensureFreshToken, loadInitialState } from "./history";
 
 interface State {
   messages: LangChainMessage[];
@@ -22,6 +22,8 @@ interface State {
 
 const messageConverter = createMessageConverter(convertLangChainMessages);
 
+// 缺陷 (a) 修复：挂载时先拉历史，加载完再以其为 initialState 建 runtime。
+// 上层用 key={threadId} 重建本组件 → 切换/刷新会话都会重新加载。
 export function RuntimeProvider({
   threadId,
   children,
@@ -29,8 +31,43 @@ export function RuntimeProvider({
   threadId: string;
   children: ReactNode;
 }) {
+  const [initialState, setInitialState] = useState<State | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadInitialState(threadId).then((s) => {
+      if (alive) setInitialState(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [threadId]);
+
+  if (initialState === null) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        正在加载会话…
+      </div>
+    );
+  }
+  return (
+    <RuntimeInner threadId={threadId} initialState={initialState}>
+      {children}
+    </RuntimeInner>
+  );
+}
+
+function RuntimeInner({
+  threadId,
+  initialState,
+  children,
+}: {
+  threadId: string;
+  initialState: State;
+  children: ReactNode;
+}) {
   const runtime = useAssistantTransportRuntime<State>({
-    initialState: { messages: [] },
+    initialState,
     // 适配 1：同源代理
     api: "/api/chat",
     // converter：后端 langgraph 状态里的 messages（LangChainMessage[]）+ pendingCommands 乐观更新。
@@ -53,9 +90,10 @@ export function RuntimeProvider({
         isRunning: isSending,
       };
     },
-    // 适配 2：JWT header，每次请求读当前 token
+    // 适配 2：JWT header。缺陷 (b) 修复：发送前先 ensureFreshToken——它经 apiFetch
+    // 探测 /api/auth/me，token 过期时自动触发单飞刷新，返回最新 token，避免会话内 401。
     headers: async () => ({
-      Authorization: `Bearer ${useAuthStore.getState().accessToken ?? ""}`,
+      Authorization: `Bearer ${(await ensureFreshToken()) ?? ""}`,
     }),
     // 适配 3：body 携带 threadId
     body: { threadId },
