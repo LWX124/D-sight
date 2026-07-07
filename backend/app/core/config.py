@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     access_token_ttl_min: int = 15
     refresh_token_ttl_days: int = 30
     email_backend: str = "console"
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-v4-pro"
     bocha_api_key: str = ""
