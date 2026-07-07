@@ -38,11 +38,10 @@ def test_workspace_created_with_tools(ws):
     assert (ws / "tools" / "financial_rigor.py").exists()
 
 
-def test_workspace_copies_skills(ws):
-    # skills 必须拷入 sandbox root 内（{ws}/skills），否则真实模式枚举被 containment 拒绝
-    assert (ws / "skills").is_dir()
-    # skills_data/skills 下每个 skill 目录含 SKILL.md，至少一个被拷入
-    assert any((ws / "skills").rglob("SKILL.md"))
+def test_workspace_no_skills_copy(ws):
+    # 契约变更：workspace 创建不再全量拷贝 skills（物化职责移交给 build_agent）。
+    # 新 workspace 无 skills 目录；内容一律由 write_skills 按已安装 skill 从 DB 物化。
+    assert not (ws / "skills").exists()
 
 
 def test_workspace_idempotent(ws):

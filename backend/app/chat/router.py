@@ -88,7 +88,10 @@ async def chat(
 
     thread_id = str(thread.id)
     checkpointer = getattr(http_request.app.state, "checkpointer", None)
-    agent = build_agent(thread_id, checkpointer)
+    from app.skills.materialize import load_installed_skills
+
+    skill_rows = await load_installed_skills(db, user.id)
+    agent = build_agent(thread_id, checkpointer, skill_rows=skill_rows)
 
     async def run_callback(controller: RunController):
         if controller.state is None:

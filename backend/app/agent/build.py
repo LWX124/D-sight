@@ -199,8 +199,15 @@ def make_checkpointer(database_url: str):
     return AsyncPostgresSaver.from_conn_string(url)
 
 
-def build_agent(thread_id: str, checkpointer=None):
+def build_agent(thread_id: str, checkpointer=None, skill_rows=None):
     ws = get_thread_workspace(thread_id)
+    if skill_rows is not None:
+        from app.skills.materialize import write_skills
+
+        write_skills(ws, skill_rows)
+    # 新 workspace 不再全量拷贝 skills；无条件建空目录（幂等），
+    # 使 skill_rows=None 的直连调用（test_real_smoke 等）也能组装。
+    (ws / "skills").mkdir(exist_ok=True)
     prompt = SYSTEM_PROMPT + f"\n当前日期：{dt.date.today().isoformat()}（做时效判断时以此为准）"
     return create_deep_agent(
         model=_make_model(),

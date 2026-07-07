@@ -43,10 +43,10 @@ def get_thread_workspace(thread_id: str) -> Path:
     """确保 ``{WORKSPACES_ROOT}/{thread_id}/`` 存在并返回其绝对路径。
 
     首次创建时把 ``skills_data/tools/`` 拷入 ``{ws}/tools/``，使
-    ``run_python`` 与文件工具在同一真实目录下可见同一套工具脚本；同时把
-    ``skills_data/skills/`` 拷入 ``{ws}/skills/``，使 deepagents 的 skill
-    枚举指向 sandbox root 内（否则真实模式下 containment 守卫拒绝越界读取）。
-    每 thread 拷 19 个 skill 目录是有意的隔离优先取舍（磁盘廉价，去重/软链为后续工作）。
+    ``run_python`` 与文件工具在同一真实目录下可见同一套工具脚本。
+    skills 不再在此全量拷贝——改由 ``build_agent`` 按用户已安装 skill 从 DB
+    物化到 ``{ws}/skills/``（见 ``app.skills.materialize.write_skills``），
+    卸载/下架即时生效；``skill_rows=None`` 的直连调用得到空 skills 目录。
 
     ``thread_id`` 必须是纯 token（真实值为 UUID）；含 ``/`` / ``\\`` /
     ``..`` 或绝对路径者一律拒绝，否则可 mkdir + 拷贝到 ``WORKSPACES_ROOT``
@@ -63,7 +63,6 @@ def get_thread_workspace(thread_id: str) -> Path:
     if not ws.exists():
         ws.mkdir(parents=True)
         shutil.copytree(SKILLS_DATA / "tools", ws / "tools")
-        shutil.copytree(SKILLS_DATA / "skills", ws / "skills")
     return ws
 
 
