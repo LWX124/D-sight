@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     access_token_ttl_min: int = 15
     refresh_token_ttl_days: int = 30
     email_backend: str = "console"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-v4-pro"
+    bocha_api_key: str = ""
+    fake_llm: bool = False
 
 
 @lru_cache

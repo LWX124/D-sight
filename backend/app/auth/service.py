@@ -24,7 +24,7 @@ def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-async def request_code(db: AsyncSession, email: str) -> None:
+async def request_code(db: AsyncSession, email: str) -> str:
     latest = await db.scalar(
         select(VerificationCode)
         .where(VerificationCode.email == email)
@@ -43,6 +43,7 @@ async def request_code(db: AsyncSession, email: str) -> None:
     await get_email_sender().send(
         email, "D-sight 注册验证码", f"验证码：{code}，{CODE_TTL_MIN} 分钟内有效"
     )
+    return code
 
 
 async def register(db: AsyncSession, email: str, code: str, password: str) -> User:
