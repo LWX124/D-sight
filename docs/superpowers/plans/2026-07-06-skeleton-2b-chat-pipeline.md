@@ -1273,7 +1273,49 @@ git commit -m "feat(frontend): assistant-ui chat with thread sidebar over assist
 
 ---
 
-### Task 8: E2E 冒烟 + CI 扩展
+### Task 8: 聊天历史恢复 + 会话内 401 刷新（T7 遗留缺陷）
+
+**Files:**
+- Create: `backend/app/chat/history.py`、`backend/tests/test_chat_history.py`
+- Modify: `backend/app/chat/router.py`（新增 GET messages 端点）、`frontend/src/chat/RuntimeProvider.tsx`（initialState 从历史加载 + 401 刷新）
+- Test: `backend/tests/test_chat_history.py`、`frontend/src/chat/history.test.ts`
+
+**背景**：T7 暴露两个真实缺陷——(a) 刷新页面聊天历史不恢复（assistant-transport initialState 为空，checkpointer 只存服务端 LLM 上下文，未暴露给 UI）；(b) 聊天请求走 assistant-transport 自己的 fetch，绕过 apiFetch 单飞刷新，access token（15min）过期后发消息直接 401 失败。
+
+**Interfaces:**
+- Consumes: Task 5 端点、`build_agent`/checkpointer、2a `get_current_user`/`Thread`；前端 T6 `apiFetch`/`useAuthStore`
+- Produces:
+  - `GET /api/threads/{thread_id}/messages`（需 Bearer，归属 404）→ `{"messages": [LangChainMessage...]}`：从 checkpointer 读该 thread 最新 state 的 messages，转成前端 `convertLangChainMessages` 可消费的形态（`{type, content}`，type ∈ human/ai；工具消息可略过或作为 ai 附注——按渐进披露，UI 恢复只需 human/ai 文本轮）
+  - `load_thread_messages(thread_id, checkpointer) -> list[dict]`（`app/chat/history.py`，从 checkpointer aget 提取，无历史返回 []）
+  - 前端 RuntimeProvider：挂载时先 `apiFetch(GET messages)` 填充 `initialState.messages`（走 apiFetch → 自动刷新）；assistant-transport 的 `headers` 改为在发送前确保 token 新鲜——用 `apiFetch("/api/auth/me")` 探测或直接在 headers async fn 内复用一个"确保有效 token"helper（401 时先 tryRefresh 再返回）
+
+- [ ] **Step 1: 后端历史提取（失败测试）**
+
+`backend/tests/test_chat_history.py`：先跑一轮 FAKE_LLM 聊天（复用 test_chat_api 的方式）产生 checkpointer 状态，再 `GET /api/threads/{tid}/messages` 断言：200、messages 含刚发的 human 文本与 ai "假回复"；非本人 thread → 404；无历史的新 thread → 200 `{"messages": []}`。
+
+（测试用 FAKE_LLM；checkpointer 在 ASGITransport 测试下为 None → deepagents 内存 checkpointer，跨请求不共享内存态，所以**测试需在同一进程内先 POST /api/chat 再 GET**——若内存 checkpointer 不跨请求保留，改用 lifespan 注入的持久 checkpointer 或在测试夹具里注入一个共享的 InMemorySaver 到 app.state，使 build_agent 两次调用共享它。实现时按实际 checkpointer 生命周期选定，报告说明。）
+
+- [ ] **Step 2: 实现 history.py + 端点**
+
+`load_thread_messages`：用 checkpointer 的 `aget_tuple`/`aget` 按 `{"configurable":{"thread_id":tid}}` 取最新 checkpoint，从 channel_values["messages"] 提取，映射为 `{"type": "human"|"ai", "content": <text>}`（BaseMessage.type 已是 human/ai/tool；tool 消息按需过滤）。端点复用 Task 5 的 `_owned_thread` 归属校验，checkpointer 从 `request.app.state` 取（None → 空历史，因为无持久 checkpointer 时本就无跨会话历史）。
+
+- [ ] **Step 3: 前端历史加载 + 401 刷新（失败测试 + 实现）**
+
+`frontend/src/chat/history.test.ts`：mock `apiFetch` 返回两条历史消息，断言 `loadInitialState(threadId)` 返回 `{messages: [...]}`；mock 首次 401→刷新→重试（复用 apiFetch 单飞）路径不额外发起并发刷新。
+RuntimeProvider：新增 `loadInitialState(threadId)` 用 `apiFetch` 拉历史填 initialState；`headers` async fn 改为调用一个 `ensureFreshToken()`（内部：若近期无 token 则 `apiFetch("/api/auth/me")` 触发刷新链路，返回最新 `getState().accessToken`）。key={threadId} 重建时重新加载。
+
+- [ ] **Step 4: 全量验证 + Commit（需用户已授权）**
+
+Run: 后端 `uv run pytest -q` 全绿；前端 `npx vitest run` 全绿 + `npm run build`。
+
+```bash
+git add backend/app/chat/ backend/tests/test_chat_history.py frontend/src/chat/
+git commit -m "feat(chat): restore thread history on reload and refresh token mid-session"
+```
+
+---
+
+### Task 9: E2E 冒烟 + CI 扩展
 
 **Files:**
 - Create: `frontend/e2e/chat.spec.ts`、`frontend/playwright.config.ts`
