@@ -1,10 +1,9 @@
-import os
-
 import httpx
 import trafilatura
 from langchain_core.tools import tool
 
 from app.agent.tools.safe import tool_guard
+from app.core.config import get_settings
 
 BOCHA_ENDPOINT = "https://api.bochaai.com/v1/web-search"
 
@@ -13,7 +12,7 @@ BOCHA_ENDPOINT = "https://api.bochaai.com/v1/web-search"
 @tool_guard
 def web_search(query: str, count: int = 8) -> str:
     """联网搜索，返回标题/链接/摘要。用于收集新闻、研报、财务数据线索、多空观点。"""
-    api_key = os.environ.get("BOCHA_API_KEY")
+    api_key = get_settings().bocha_api_key
     if not api_key:
         return "错误：搜索服务未配置（缺少 BOCHA_API_KEY），请改用其他工具（如 stock_quote/stock_financials/fetch_page）或告知用户此题需要联网搜索。"
     resp = httpx.post(

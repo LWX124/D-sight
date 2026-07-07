@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import httpx
 import pytest
 import respx
@@ -7,9 +9,17 @@ from app.agent.tools.stock import _sina_symbol
 from app.agent.tools.web import BOCHA_ENDPOINT, fetch_page, web_search
 
 
+def _patch_bocha(monkeypatch, key: str):
+    # web_search 从 settings 取 key（与 deepseek 一致，非 os.environ）；直接打桩 settings。
+    monkeypatch.setattr(
+        "app.agent.tools.web.get_settings",
+        lambda: SimpleNamespace(bocha_api_key=key),
+    )
+
+
 @respx.mock
 def test_web_search_formats_results(monkeypatch):
-    monkeypatch.setenv("BOCHA_API_KEY", "test-key")
+    _patch_bocha(monkeypatch, "test-key")
     respx.post(BOCHA_ENDPOINT).mock(
         return_value=httpx.Response(
             200,
@@ -23,7 +33,7 @@ def test_web_search_formats_results(monkeypatch):
 
 
 def test_web_search_degrades_without_key(monkeypatch):
-    monkeypatch.delenv("BOCHA_API_KEY", raising=False)
+    _patch_bocha(monkeypatch, "")
     assert web_search.invoke({"query": "任意"}).startswith("错误：搜索服务未配置")
 
 

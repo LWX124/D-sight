@@ -67,9 +67,11 @@ async def get_thread_messages(
     归属校验复用 _owned_thread（非本人/已删/非法 id → 404）。checkpointer 从
     app.state 取（未跑 lifespan 的进程为 None → 空历史，本就无跨会话历史）。
     """
-    await _owned_thread(db, user, thread_id)
+    thread = await _owned_thread(db, user, thread_id)
     checkpointer = getattr(request.app.state, "checkpointer", None)
-    messages = await load_thread_messages(thread_id, checkpointer)
+    # 用规范化 id（str(thread.id)）查 checkpointer/工作区，避免大小写/urn 变体
+    # 造成空历史或多余工作区目录（chat 端点同样规范化）。
+    messages = await load_thread_messages(str(thread.id), checkpointer)
     return {"messages": messages}
 
 
