@@ -1,3 +1,5 @@
+import asyncio
+
 from tests.test_auth_api import _register
 
 
@@ -11,16 +13,27 @@ async def test_thread_crud_flow(client, db_session):
 
     resp = await client.post("/api/threads/", json={}, headers=headers)
     assert resp.status_code == 201
-    tid = resp.json()["id"]
-    assert resp.json()["title"] == "新对话"
+    created = resp.json()
+    tid = created["id"]
+    assert created["title"] == "新对话"
 
+    # 第二个 thread B（后建，updated_at 更新）——用于验证重命名后的排序
+    tid_b = (await client.post("/api/threads/", json={}, headers=headers)).json()["id"]
+
+    await asyncio.sleep(0.01)  # 确保 updated_at 严格晚于 created_at，避免同毫秒 flaky
     resp = await client.patch(f"/api/threads/{tid}", json={"title": "茅台研究"}, headers=headers)
-    assert resp.status_code == 200 and resp.json()["title"] == "茅台研究"
+    assert resp.status_code == 200
+    patched = resp.json()
+    assert patched["title"] == "茅台研究"
+    # PATCH 刷新 updated_at（2b 依赖：会话按最近活跃排序）
+    assert patched["updated_at"] > created["updated_at"]
 
+    # 重命名后 A 冒泡到最前（updated_at desc 生效），B 退居其后
     resp = await client.get("/api/threads/", headers=headers)
-    assert [t["id"] for t in resp.json()] == [tid]
+    assert [t["id"] for t in resp.json()] == [tid, tid_b]
 
     assert (await client.delete(f"/api/threads/{tid}", headers=headers)).status_code == 204
+    assert (await client.delete(f"/api/threads/{tid_b}", headers=headers)).status_code == 204
     resp = await client.get("/api/threads/", headers=headers)
     assert resp.json() == []
 
