@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.auth.router import router as auth_router
 from app.auth.service import AuthError
+from app.threads.router import router as threads_router
 
 
 def create_app() -> FastAPI:
@@ -17,4 +18,5 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth_router)
+    app.include_router(threads_router)
     return app
