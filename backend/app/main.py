@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.admin.router import router as admin_router
 from app.agent.build import make_checkpointer
 from app.auth.router import router as auth_router
 from app.auth.service import AuthError
@@ -45,4 +46,5 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(threads_router)
     app.include_router(chat_router)
+    app.include_router(admin_router)
     return app
