@@ -28,6 +28,27 @@ describe("apiFetch 401 刷新重试", () => {
     expect(calls.some((c) => c.includes("/api/auth/refresh"))).toBe(true);
   });
 
+  it("并发 401 只触发一次 refresh（单飞）", async () => {
+    let refreshCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init?: any) => {
+        if (String(url).endsWith("/api/auth/refresh")) {
+          refreshCount += 1;
+          return new Response(JSON.stringify({ access_token: "new-token" }), { status: 200 });
+        }
+        const auth = init?.headers?.Authorization;
+        return new Response(auth === "Bearer new-token" ? "{}" : "unauthorized", {
+          status: auth === "Bearer new-token" ? 200 : 401,
+        });
+      }),
+    );
+    const [a, b] = await Promise.all([apiFetch("/api/threads/"), apiFetch("/api/threads/")]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(refreshCount).toBe(1);
+  });
+
   it("刷新失败则清空 token", async () => {
     vi.stubGlobal(
       "fetch",
