@@ -17,6 +17,7 @@ from app.core.db import Base
 
 from app.auth import models as auth_models  # noqa: F401
 from app.threads import models as thread_models  # noqa: F401
+from app.credits import models as credit_models  # noqa: F401
 
 if os.environ.get("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
