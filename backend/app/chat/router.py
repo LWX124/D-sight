@@ -137,6 +137,23 @@ async def chat(
                         s, user.id, credits_due,
                         kind="chat", ref_type="thread", ref_id=thread_id,
                     )
+                # 失败运行（ok=False）也按已读 skill 扣：skill 内容已消费。
+                from app.skills.usage import extract_used_skills
+
+                used = extract_used_skills(controller.state.get("messages") or [])
+                if used:
+                    from sqlalchemy import select as _select
+
+                    from app.skills.models import Skill
+
+                    rows = (await s.execute(
+                        _select(Skill).where(Skill.slug.in_(used), Skill.price > 0)
+                    )).scalars().all()
+                    for skill_row in rows:
+                        await service.charge(
+                            s, user.id, skill_row.price,
+                            kind="skill", ref_type="skill", ref_id=skill_row.slug,
+                        )
                 t = await s.get(Thread, thread.id)
                 if t is not None:
                     t.updated_at = datetime.now(UTC)
