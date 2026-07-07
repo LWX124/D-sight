@@ -18,11 +18,17 @@ async def lifespan(app: FastAPI):
     ASGITransport 测试不跑 lifespan，故 ``app.state.checkpointer`` 缺省 → 端点走
     None 分支（build_agent 用 deepagents 默认内存 checkpointer）。
     """
+    from app.core.scheduler import start_scheduler, stop_scheduler
+
     cm = make_checkpointer(get_settings().database_url)
     async with cm as checkpointer:
         await checkpointer.setup()
         app.state.checkpointer = checkpointer
-        yield
+        start_scheduler()
+        try:
+            yield
+        finally:
+            stop_scheduler()
 
 
 def create_app() -> FastAPI:
