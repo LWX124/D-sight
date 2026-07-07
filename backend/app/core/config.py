@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     free_monthly_quota: int = 100
     subscribed_monthly_quota: int = 2000
     min_charge: int = 1
+    redis_url: str = "redis://localhost:6381/0"
+    rate_limit_per_min: int = 20
 
 
 @lru_cache

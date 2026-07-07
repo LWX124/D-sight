@@ -72,6 +72,10 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ):
     thread = await _owned_thread(db, user, request.thread_id)
+    from app.core.ratelimit import check_rate
+
+    if not await check_rate(str(user.id)):
+        raise HTTPException(429, "请求过于频繁")
     try:
         await service.precheck(db, user.id, need=get_settings().min_charge)
     except service.InsufficientCredits:
