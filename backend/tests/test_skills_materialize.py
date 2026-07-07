@@ -19,6 +19,18 @@ async def test_write_skills_clears_and_writes(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_write_skills_rejects_bad_slug(tmp_path):
+    class Row:
+        def __init__(self, slug, body="x"):
+            self.slug, self.body = slug, body
+    for bad in ("../esc", "/abs", "a/b", ""):
+        with pytest.raises(ValueError):
+            write_skills(tmp_path, [Row(bad)])
+    # 拒绝后不得留下越界文件
+    assert not (tmp_path.parent / "esc").exists()
+
+
+@pytest.mark.asyncio
 async def test_load_installed_excludes_inactive(db_session, registered_user):
     from sqlalchemy import select
     from app.skills.models import Skill

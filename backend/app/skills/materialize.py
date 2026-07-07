@@ -22,6 +22,11 @@ def write_skills(ws: Path, rows: list) -> None:
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     for row in rows:
-        d = dest / row.slug
+        slug = row.slug
+        if (not slug or "/" in slug or "\\" in slug or ".." in slug
+                or Path(slug).is_absolute()):
+            raise ValueError(f"非法 skill slug: {slug!r}")
+        d = dest / slug
+        assert d.resolve().is_relative_to(dest.resolve())
         d.mkdir()
         (d / "SKILL.md").write_text(row.body, encoding="utf-8")
