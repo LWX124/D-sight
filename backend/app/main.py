@@ -9,6 +9,7 @@ from app.auth.router import router as auth_router
 from app.auth.service import AuthError
 from app.chat.router import router as chat_router
 from app.core.config import get_settings
+from app.credits.router import router as credits_router
 from app.threads.router import router as threads_router
 
 
@@ -47,4 +48,5 @@ def create_app() -> FastAPI:
     app.include_router(threads_router)
     app.include_router(chat_router)
     app.include_router(admin_router)
+    app.include_router(credits_router)
     return app

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
+import { creditsKey, fetchCredits } from "@/lib/credits";
 
 async function listThreads(): Promise<ThreadT[]> {
   const r = await apiFetch("/api/threads/");
@@ -28,9 +29,11 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [creditNotice, setCreditNotice] = useState(false);
   const autoCreating = useRef(false);
 
   const { data: threads } = useQuery({ queryKey: threadsKey, queryFn: listThreads });
+  const { data: credits } = useQuery({ queryKey: creditsKey, queryFn: fetchCredits });
 
   const autoCreate = useMutation({
     mutationFn: createThread,
@@ -71,13 +74,38 @@ export default function ChatPage() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-border px-4 py-2">
           <span className="text-sm font-medium text-foreground">D-sight</span>
-          <Button variant="outline" size="sm" onClick={onLogout}>
-            退出登录
-          </Button>
+          <div className="flex items-center gap-3">
+            {credits && (
+              <span
+                data-testid="credit-badge"
+                className="text-xs text-muted-foreground tabular-nums"
+              >
+                余额 {credits.balance}/{credits.monthly_quota}
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={onLogout}>
+              退出登录
+            </Button>
+          </div>
         </header>
+        {creditNotice && (
+          <div
+            data-testid="credit-notice"
+            className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive"
+          >
+            积分不足，请联系管理员或等待月初重置
+          </div>
+        )}
         <div className="min-h-0 flex-1">
           {activeThreadId ? (
-            <RuntimeProvider key={activeThreadId} threadId={activeThreadId}>
+            <RuntimeProvider
+              key={activeThreadId}
+              threadId={activeThreadId}
+              onSendResponse={(status) => setCreditNotice(status === 402)}
+              onFinish={() => {
+                qc.invalidateQueries({ queryKey: creditsKey });
+              }}
+            >
               <Thread />
             </RuntimeProvider>
           ) : (
