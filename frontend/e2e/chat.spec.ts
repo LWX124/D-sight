@@ -22,6 +22,9 @@ test("注册登录并收到流式回复", async ({ page, request }) => {
   const composer = page.getByPlaceholder("Send a message...");
   await expect(composer).toBeVisible({ timeout: 30_000 });
 
+  // 登录后积分徽章应可见（Task 7 review gap：徽章拉取余额并渲染）。
+  await expect(page.getByTestId("credit-badge")).toBeVisible({ timeout: 30_000 });
+
   await composer.fill("茅台现在多少钱");
   await page.keyboard.press("Enter");
 

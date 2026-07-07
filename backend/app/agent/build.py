@@ -35,7 +35,7 @@ from app.agent.fake_llm import FakeToolCallingModel
 from app.agent.tools.runner import make_run_python
 from app.agent.tools.stock import stock_financials, stock_quote
 from app.agent.tools.web import fetch_page, web_search
-from app.agent.workspace import SKILLS_DATA, get_thread_workspace, make_backend
+from app.agent.workspace import get_thread_workspace, make_backend
 from app.core.config import get_settings
 
 ALLOWED_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
@@ -206,7 +206,7 @@ def build_agent(thread_id: str, checkpointer=None):
         model=_make_model(),
         tools=[web_search, fetch_page, stock_quote, stock_financials, make_run_python(ws)],
         backend=make_backend(ws),
-        skills=[str(SKILLS_DATA / "skills")],
+        skills=[str(ws / "skills")],
         system_prompt=prompt,
         checkpointer=checkpointer,
     )

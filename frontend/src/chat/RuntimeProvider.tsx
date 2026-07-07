@@ -27,9 +27,13 @@ const messageConverter = createMessageConverter(convertLangChainMessages);
 export function RuntimeProvider({
   threadId,
   children,
+  onSendResponse,
+  onFinish,
 }: {
   threadId: string;
   children: ReactNode;
+  onSendResponse?: (status: number) => void;
+  onFinish?: () => void;
 }) {
   const [initialState, setInitialState] = useState<State | null>(null);
 
@@ -51,7 +55,12 @@ export function RuntimeProvider({
     );
   }
   return (
-    <RuntimeInner threadId={threadId} initialState={initialState}>
+    <RuntimeInner
+      threadId={threadId}
+      initialState={initialState}
+      onSendResponse={onSendResponse}
+      onFinish={onFinish}
+    >
       {children}
     </RuntimeInner>
   );
@@ -61,10 +70,14 @@ function RuntimeInner({
   threadId,
   initialState,
   children,
+  onSendResponse,
+  onFinish,
 }: {
   threadId: string;
   initialState: State;
   children: ReactNode;
+  onSendResponse?: (status: number) => void;
+  onFinish?: () => void;
 }) {
   const runtime = useAssistantTransportRuntime<State>({
     initialState,
@@ -97,6 +110,11 @@ function RuntimeInner({
     }),
     // 适配 3：body 携带 threadId
     body: { threadId },
+    // 积分：onResponse 在 !ok 抛错之前拿到原始 Response（见 useAssistantTransportRuntime
+    // 源码 options.onResponse?.(response) 早于 throw），故用状态码判 402 最稳，胜过解析错误消息。
+    onResponse: (response) => onSendResponse?.(response.status),
+    // 每次发送结束（成功或失败的 finally）刷新余额徽章。
+    onFinish: () => onFinish?.(),
   });
 
   return (

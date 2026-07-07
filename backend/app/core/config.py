@@ -12,10 +12,22 @@ class Settings(BaseSettings):
     access_token_ttl_min: int = 15
     refresh_token_ttl_days: int = 30
     email_backend: str = "console"
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-v4-pro"
     bocha_api_key: str = ""
     fake_llm: bool = False
+    tokens_per_credit: int = 1000
+    free_monthly_quota: int = 100
+    subscribed_monthly_quota: int = 2000
+    min_charge: int = 1
+    redis_url: str = "redis://localhost:6381/0"
+    rate_limit_per_min: int = 20
 
 
 @lru_cache
