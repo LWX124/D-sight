@@ -30,3 +30,7 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+# alembic env.py imports app modules after `config = context.config` (brief-mandated ordering)
+"alembic/env.py" = ["E402"]
