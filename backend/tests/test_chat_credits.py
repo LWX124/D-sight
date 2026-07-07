@@ -1,47 +1,7 @@
-import uuid
-from types import SimpleNamespace
-
 import pytest
-from sqlalchemy import select
 
 from app.credits import service
-from tests.test_auth_api import _register
-
-
-def _chat_body(thread_id: str, text: str = "茅台现在多少钱") -> dict:
-    return {
-        "commands": [
-            {"type": "add-message", "message": {"role": "user", "parts": [{"type": "text", "text": text}]}}
-        ],
-        "threadId": thread_id,
-        "state": None,
-    }
-
-
-def _auth(user) -> dict:
-    return {"Authorization": f"Bearer {user.token}"}
-
-
-@pytest.fixture
-async def registered_user(client, db_session, monkeypatch):
-    monkeypatch.setenv("FAKE_LLM", "1")
-    from app.core import config
-
-    config.get_settings.cache_clear()
-    from app.auth.models import User
-
-    # 每个测试独立邮箱：DB 跨用例不回滚，同邮箱二次 request-code 会撞 60s 限流(429)
-    email = f"credits-user-{uuid.uuid4().hex[:8]}@test.dev"
-    token = await _register(client, db_session, email)
-    row = await db_session.scalar(select(User).where(User.email == email))
-    yield SimpleNamespace(id=row.id, token=token, email=email)
-    config.get_settings.cache_clear()
-
-
-@pytest.fixture
-async def a_thread(client, registered_user):
-    resp = await client.post("/api/threads/", json={}, headers=_auth(registered_user))
-    return resp.json()["id"]
+from tests.conftest import _auth, _chat_body
 
 
 @pytest.mark.asyncio

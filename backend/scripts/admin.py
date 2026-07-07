@@ -15,13 +15,17 @@ async def _main(argv):
     async with get_sessionmaker()() as s:
         user = (await s.execute(select(User).where(User.email == email))).scalar_one_or_none()
         if user is None:
-            print(f"no such user: {email}"); return
+            print(f"no such user: {email}")
+            return
         if cmd == "set-admin":
-            user.role = "admin"; await s.commit(); print(f"{email} is now admin")
+            user.role = "admin"
+            await s.commit()
+            print(f"{email} is now admin")
         elif cmd == "grant":
             await service.ensure_account(s, user.id)
             await service.grant(s, user.id, int(argv[3]), kind="adjust", ref_type="cli")
-            await s.commit(); print(f"granted {argv[3]} to {email}")
+            await s.commit()
+            print(f"granted {argv[3]} to {email}")
         else:
             print(f"unknown cmd: {cmd}")
 
