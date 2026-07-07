@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-v4-pro"
     bocha_api_key: str = ""
     fake_llm: bool = False
+    tokens_per_credit: int = 1000
+    free_monthly_quota: int = 100
+    subscribed_monthly_quota: int = 2000
+    min_charge: int = 1
 
 
 @lru_cache
