@@ -3,6 +3,7 @@ import uuid
 
 import jwt
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
@@ -46,9 +47,13 @@ async def _valid_refresh_row(db: AsyncSession, request: Request) -> tuple[Refres
     return row, payload["sub"]
 
 
-@router.post("/request-code", status_code=204)
-async def request_code(body: RequestCodeIn, db: AsyncSession = Depends(get_db)) -> None:
-    await service.request_code(db, body.email)
+@router.post("/request-code")
+async def request_code(body: RequestCodeIn, db: AsyncSession = Depends(get_db)) -> Response:
+    code = await service.request_code(db, body.email)
+    # 测试后门：仅 FAKE_LLM 模式下回传验证码，供 E2E 无邮箱取码；生产恒为 204 无体。
+    if get_settings().fake_llm:
+        return JSONResponse({"debug_code": code})
+    return Response(status_code=204)
 
 
 @router.post("/register", status_code=201)

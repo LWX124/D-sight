@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 
@@ -25,7 +26,9 @@ async def auth_and_thread(client, db_session, monkeypatch):
     token = await _register(client, db_session, f"chat-user-{uuid.uuid4().hex[:8]}@test.dev")
     headers = {"Authorization": f"Bearer {token}"}
     tid = (await client.post("/api/threads/", json={}, headers=headers)).json()["id"]
-    return headers, tid
+    yield headers, tid
+    # 清缓存，避免 fake_llm=True 泄漏到后续（如非 fake 的鉴权）用例。
+    config.get_settings.cache_clear()
 
 
 async def test_chat_streams_fake_reply(auth_and_thread, client):
@@ -60,12 +63,23 @@ async def test_chat_rejects_foreign_thread(auth_and_thread, client, db_session):
 
 async def test_chat_sets_title_and_touches_thread(auth_and_thread, client):
     headers, tid = auth_and_thread
+
+    def _updated_at(threads: list[dict]) -> str:
+        return next(t for t in threads if t["id"] == tid)["updated_at"]
+
+    before = _updated_at((await client.get("/api/threads/", headers=headers)).json())
+    # 时钟分辨率保护：确保 chat 触碰能产生严格更大的 updated_at。
+    await asyncio.sleep(0.01)
+
     async with client.stream(
         "POST", "/api/chat", json=_chat_body(tid, "分析贵州茅台的投资价值，重点看护城河"), headers=headers
     ) as resp:
         async for _ in resp.aiter_text():
             pass
+
     threads = (await client.get("/api/threads/", headers=headers)).json()
     me = next(t for t in threads if t["id"] == tid)
     assert me["title"].startswith("分析贵州茅台")
     assert len(me["title"]) <= 30
+    # 会话被"触碰"：updated_at 严格增大（发消息刷新排序时间）。
+    assert me["updated_at"] > before
