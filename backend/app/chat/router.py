@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import uuid
 from datetime import UTC, datetime
 
@@ -97,6 +98,7 @@ async def chat(
             controller.state["messages"].append(m.model_dump())
 
         usage_cb = UsageMetadataCallbackHandler()
+        ok = False
         config = {
             "configurable": {"thread_id": thread_id},
             "recursion_limit": 200,
@@ -111,18 +113,27 @@ async def chat(
                     subgraphs=True,
                 ):
                     append_langgraph_event(controller.state, namespace, event_type, chunk)
+            ok = True  # 流正常跑完：保留 MIN_CHARGE 下限
         except TimeoutError:
-            # 超时不注入错误事件（断言不依赖其文本）；仍走 finally 按已计量 token 实扣。
+            # 超时视为已交付部分服务（"失败按实际消耗扣"仍走 MIN_CHARGE 下限）；不注入错误事件。
+            ok = True
             logger.warning("chat run timed out after 900s (thread=%s), charging metered tokens", thread_id)
         finally:
             # 结束扣费 + touch updated_at 合并为一次事务（不复用请求级 session）。
-            # updated_at 显式赋值以确保 SQLAlchemy 产生 UPDATE（同值 title 赋值不会标脏）。
+            # 硬失败（未交付任何服务）按已计量 token 实扣：0 token → 不扣费、不写交易行。
+            # 成功/超时后交付：保留 MIN_CHARGE 下限。updated_at 无论是否扣费都必须推进。
             total = sum(v.get("total_tokens", 0) for v in usage_cb.usage_metadata.values())
+            credits_due = (
+                tokens_to_credits(total)
+                if ok
+                else math.ceil(max(0, total) / get_settings().tokens_per_credit)
+            )
             async with get_sessionmaker()() as s:
-                await service.charge(
-                    s, user.id, tokens_to_credits(total),
-                    kind="chat", ref_type="thread", ref_id=thread_id,
-                )
+                if credits_due > 0:
+                    await service.charge(
+                        s, user.id, credits_due,
+                        kind="chat", ref_type="thread", ref_id=thread_id,
+                    )
                 t = await s.get(Thread, thread.id)
                 if t is not None:
                     t.updated_at = datetime.now(UTC)
