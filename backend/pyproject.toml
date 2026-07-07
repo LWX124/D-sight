@@ -25,6 +25,10 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Engine/pool is session-lived (lru_cache); run all async tests + fixtures on one
+# shared session loop so pooled asyncpg connections aren't reused across loops.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = ["."]
 

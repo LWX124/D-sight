@@ -15,6 +15,8 @@ import os
 
 from app.core.db import Base
 
+from app.auth import models as auth_models  # noqa: F401
+
 if os.environ.get("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 target_metadata = Base.metadata
