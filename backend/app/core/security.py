@@ -12,7 +12,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode(), password_hash.encode())
+    # 防御深度：bcrypt 对 >72 字节密码抛 ValueError，此处兜底返回 False（登录返回 401 而非 500）。
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except ValueError:
+        return False
 
 
 def create_access_token(user_id: str) -> str:

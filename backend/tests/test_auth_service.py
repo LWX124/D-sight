@@ -42,6 +42,19 @@ async def test_register_wrong_code_rejected(db_session):
     assert exc.value.status == 400
 
 
+async def test_wrong_code_invalidates_original(db_session):
+    email = "svc-brute@test.dev"
+    await service.request_code(db_session, email)
+    good = await _get_code(db_session, email)
+    # 错一次即作废：随后用正确的原码也无法注册。
+    with pytest.raises(service.AuthError) as exc:
+        await service.register(db_session, email, "000000", "pw-123456")
+    assert exc.value.status == 400
+    with pytest.raises(service.AuthError) as exc:
+        await service.register(db_session, email, good, "pw-123456")
+    assert exc.value.status == 400
+
+
 async def test_register_duplicate_email_rejected(db_session):
     email = "svc-dup@test.dev"
     await service.request_code(db_session, email)

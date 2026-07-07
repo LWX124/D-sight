@@ -2,6 +2,7 @@ import datetime as dt
 import secrets
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.emailer import get_email_sender
@@ -52,19 +53,39 @@ async def register(db: AsyncSession, email: str, code: str, password: str) -> Us
         .where(
             VerificationCode.email == email,
             VerificationCode.code == code,
+            VerificationCode.purpose == "register",
             VerificationCode.consumed_at.is_(None),
         )
         .order_by(VerificationCode.created_at.desc())
         .limit(1)
     )
     if vc is None or vc.expires_at < _now():
+        # 错一次即作废该邮箱当前有效验证码，防止无限尝试爆破——需重新请求。
+        latest = await db.scalar(
+            select(VerificationCode)
+            .where(
+                VerificationCode.email == email,
+                VerificationCode.purpose == "register",
+                VerificationCode.consumed_at.is_(None),
+            )
+            .order_by(VerificationCode.created_at.desc())
+            .limit(1)
+        )
+        if latest is not None:
+            latest.consumed_at = _now()
+            await db.commit()
         raise AuthError(400, "验证码错误或已过期")
     vc.consumed_at = _now()
     user = User(email=email, password_hash=hash_password(password))
     db.add(user)
     await db.flush()
     db.add(UserIdentity(user_id=user.id, provider="email", provider_uid=email))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 并发重复注册：唯一约束冲突 → 409 而非 500。
+        await db.rollback()
+        raise AuthError(409, "该邮箱已注册")
     await db.refresh(user)
     return user
 
