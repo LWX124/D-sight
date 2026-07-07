@@ -3,14 +3,20 @@ name = "backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "akshare>=1.18.64",
     "alembic>=1.18.5",
+    "assistant-stream>=0.0.34",
     "asyncpg>=0.31.0",
     "bcrypt>=5.0.0",
+    "deepagents==0.6.12",
     "fastapi>=0.139.0",
+    "langchain-deepseek>=1.1.0",
+    "langgraph-checkpoint-postgres>=3.1.0",
     "pydantic-settings>=2.14.2",
     "pydantic[email]>=2.13.4",
     "pyjwt>=2.13.0",
     "sqlalchemy[asyncio]>=2.0.51",
+    "trafilatura>=2.1.0",
     "uvicorn[standard]>=0.50.2",
 ]
 
@@ -19,6 +25,7 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
     "ruff>=0.15.20",
     "testcontainers[postgres]>=4.14.2",
 ]
@@ -34,6 +41,9 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
+# skills_data/ 是从 ai-berkshire 导入并提交入库的第三方生成产物（19 skill + tools/*.py），
+# 非我方编写，不纳入 lint。report_audit.py 的补丁仅追加确定性文本，同样豁免。
+extend-exclude = ["skills_data"]
 
 [tool.ruff.lint.per-file-ignores]
 # alembic env.py imports app modules after `config = context.config` (brief-mandated ordering)
