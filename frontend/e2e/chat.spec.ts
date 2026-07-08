@@ -36,4 +36,10 @@ test("注册登录并收到流式回复", async ({ page, request }) => {
   await page.getByTestId("nav-skills").click();
   await expect(page).toHaveURL(/\/skills$/);
   await expect(page.getByTestId("skill-install-dyp-ask")).toBeVisible({ timeout: 30_000 });
+
+  // 知识库页冒烟（best-effort，计划 5）：先返回聊天页（侧边栏所在），点 nav-kb → /kb，断言建库输入可见。
+  await page.goBack();
+  await page.getByTestId("nav-kb").click();
+  await expect(page).toHaveURL(/\/kb$/);
+  await expect(page.getByTestId("kb-create")).toBeVisible({ timeout: 30_000 });
 });
