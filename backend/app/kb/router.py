@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from fastapi import (
@@ -11,7 +12,7 @@ from app.auth.models import User
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.kb.ingest import ingest_document
-from app.kb.models import Kb, KbDocument
+from app.kb.models import Kb, KbDocument, KbSubscription
 from app.kb.schemas import KbCreate, KbOut
 
 router = APIRouter(prefix="/api/kb", tags=["kb"])
@@ -47,6 +48,53 @@ async def list_kb(user: User = Depends(get_current_user), db: AsyncSession = Dep
         )).scalar_one()
         out.append({"id": str(kb.id), "name": kb.name, "is_shared": kb.is_shared, "doc_count": n})
     return out
+
+
+# 注意：/subscribed 与 /subscribe/{share_slug} 必须定义在 /{kb_id} 相关路由之前，
+# 否则 "subscribed"/"subscribe" 会被 FastAPI 当作 kb_id 路径参数捕获（按定义序匹配）。
+@router.get("/subscribed", response_model=list[dict])
+async def subscribed_kb(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    kbs = (await db.execute(
+        select(Kb).join(KbSubscription, KbSubscription.kb_id == Kb.id)
+        .where(KbSubscription.user_id == user.id, Kb.is_shared.is_(True)).order_by(Kb.name)
+    )).scalars().all()
+    return [{"id": str(k.id), "name": k.name} for k in kbs]
+
+
+@router.post("/subscribe/{share_slug}")
+async def subscribe_kb(share_slug: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    kb = (await db.execute(
+        select(Kb).where(Kb.share_slug == share_slug, Kb.is_shared.is_(True))
+    )).scalar_one_or_none()
+    if kb is None:
+        raise HTTPException(404, "分享不存在或已关闭")
+    if kb.owner_id == user.id:
+        raise HTTPException(400, "不能订阅自己的知识库")
+    exists = (await db.execute(
+        select(KbSubscription).where(KbSubscription.kb_id == kb.id, KbSubscription.user_id == user.id)
+    )).scalar_one_or_none()
+    if exists is None:
+        db.add(KbSubscription(kb_id=kb.id, user_id=user.id))
+        await db.commit()
+    return {"kb_id": str(kb.id), "name": kb.name}
+
+
+@router.post("/{kb_id}/share")
+async def share_kb(kb_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    kb = await _owned_kb(db, user, kb_id)
+    if not kb.share_slug:
+        kb.share_slug = secrets.token_hex(8)
+    kb.is_shared = True
+    await db.commit()
+    return {"share_slug": kb.share_slug}
+
+
+@router.delete("/{kb_id}/share")
+async def unshare_kb(kb_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    kb = await _owned_kb(db, user, kb_id)
+    kb.is_shared = False
+    await db.commit()
+    return {"shared": False}
 
 
 @router.post("/{kb_id}/documents")
