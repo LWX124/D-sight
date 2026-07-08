@@ -82,8 +82,10 @@ async def register(db: AsyncSession, email: str, code: str, password: str) -> Us
     await db.flush()
     db.add(UserIdentity(user_id=user.id, provider="email", provider_uid=email))
     from app.credits.service import ensure_account
+    from app.skills.seed import install_defaults
 
     await ensure_account(db, user.id)
+    await install_defaults(db, user.id)
     try:
         await db.commit()
     except IntegrityError:

@@ -14,9 +14,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      // 后端：先迁移再以 FAKE_LLM=1 起 uvicorn（env 覆盖 .env 里的 FAKE_LLM=0）。
+      // 后端：先迁移、再幂等种子 skill（市场页冒烟依赖），最后以 FAKE_LLM=1 起 uvicorn（env 覆盖 .env 里的 FAKE_LLM=0）。
       command:
-        "uv run alembic upgrade head && FAKE_LLM=1 uv run uvicorn app.main:create_app --factory --port 8000",
+        "uv run alembic upgrade head && uv run python -m scripts.seed_skills && FAKE_LLM=1 uv run uvicorn app.main:create_app --factory --port 8000",
       cwd: "../backend",
       url: "http://localhost:8000/healthz",
       reuseExistingServer: !process.env.CI,

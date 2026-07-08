@@ -1,6 +1,7 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // mock apiFetch：返回两条会话，不接真后端
@@ -23,7 +24,9 @@ async function renderSidebar(activeThreadId: string | null = "t1") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ThreadListSidebar activeThreadId={activeThreadId} onSelect={() => {}} />
+      <MemoryRouter>
+        <ThreadListSidebar activeThreadId={activeThreadId} onSelect={() => {}} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

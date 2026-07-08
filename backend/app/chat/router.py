@@ -88,7 +88,10 @@ async def chat(
 
     thread_id = str(thread.id)
     checkpointer = getattr(http_request.app.state, "checkpointer", None)
-    agent = build_agent(thread_id, checkpointer)
+    from app.skills.materialize import load_installed_skills
+
+    skill_rows = await load_installed_skills(db, user.id)
+    agent = build_agent(thread_id, checkpointer, skill_rows=skill_rows)
 
     async def run_callback(controller: RunController):
         if controller.state is None:
@@ -96,6 +99,8 @@ async def chat(
         controller.state.setdefault("messages", [])
         for m in input_messages:
             controller.state["messages"].append(m.model_dump())
+        # 客户端每轮回传累积态：本轮之前的消息（含历史 read_file）不得重复计费。
+        baseline = len(controller.state["messages"])
 
         usage_cb = UsageMetadataCallbackHandler()
         ok = False
@@ -134,6 +139,27 @@ async def chat(
                         s, user.id, credits_due,
                         kind="chat", ref_type="thread", ref_id=thread_id,
                     )
+                # 失败运行（ok=False）也按已读 skill 扣：skill 内容已消费。
+                from app.skills.usage import extract_used_skills
+
+                # 仅对本轮新增消息计费；且只有本轮实际物化的 skill 才可扣（越权/幻觉读不计费）。
+                # controller.state 是 StateProxy 不支持切片，先物化为普通 list（迭代即取底层 dict）。
+                all_msgs = list(controller.state.get("messages") or [])
+                used = extract_used_skills(all_msgs[baseline:])
+                used &= {r.slug for r in skill_rows}
+                if used:
+                    from sqlalchemy import select as _select
+
+                    from app.skills.models import Skill
+
+                    rows = (await s.execute(
+                        _select(Skill).where(Skill.slug.in_(used), Skill.price > 0)
+                    )).scalars().all()
+                    for skill_row in rows:
+                        await service.charge(
+                            s, user.id, skill_row.price,
+                            kind="skill", ref_type="skill", ref_id=skill_row.slug,
+                        )
                 t = await s.get(Thread, thread.id)
                 if t is not None:
                     t.updated_at = datetime.now(UTC)

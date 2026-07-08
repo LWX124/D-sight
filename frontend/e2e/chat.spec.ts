@@ -30,4 +30,10 @@ test("注册登录并收到流式回复", async ({ page, request }) => {
 
   // fake 模型两轮后产出"假回复"。
   await expect(page.getByText("假回复")).toBeVisible({ timeout: 30_000 });
+
+  // 市场页冒烟（best-effort）：进入 /skills，断言已种子的 dyp-ask 卡片可见。
+  // 需后端已跑 seed_skills（见 playwright.config.ts webServer 命令）。
+  await page.getByTestId("nav-skills").click();
+  await expect(page).toHaveURL(/\/skills$/);
+  await expect(page.getByTestId("skill-install-dyp-ask")).toBeVisible({ timeout: 30_000 });
 });

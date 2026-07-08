@@ -13,13 +13,13 @@ from testcontainers.postgres import PostgresContainer
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
-def _chat_body(thread_id: str, text: str = "茅台现在多少钱") -> dict:
+def _chat_body(thread_id: str, text: str = "茅台现在多少钱", state=None) -> dict:
     return {
         "commands": [
             {"type": "add-message", "message": {"role": "user", "parts": [{"type": "text", "text": text}]}}
         ],
         "threadId": thread_id,
-        "state": None,
+        "state": state,
     }
 
 
