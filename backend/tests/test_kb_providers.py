@@ -23,7 +23,7 @@ async def test_fake_reranker_orders_by_overlap():
 
 def test_get_provider_failloud(monkeypatch):
     monkeypatch.setattr("app.kb.providers.get_settings",
-                        lambda: type("S", (), {"embedding_backend": "nope", "embedding_dim": 1024})())
+                        lambda: type("S", (), {"embedding_backend": "nope"})())
     with pytest.raises(RuntimeError):
         providers.get_embedding_provider()
     with pytest.raises(RuntimeError):

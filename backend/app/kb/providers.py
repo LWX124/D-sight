@@ -5,6 +5,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import get_settings
+from app.kb.models import EMBEDDING_DIM
 
 SILICONFLOW_BASE = "https://api.siliconflow.cn/v1"
 
@@ -79,7 +80,7 @@ class SiliconFlowReranker:
 def get_embedding_provider() -> EmbeddingProvider:
     b = get_settings().embedding_backend
     if b == "fake":
-        return FakeEmbedding(get_settings().embedding_dim)
+        return FakeEmbedding(EMBEDDING_DIM)
     if b == "siliconflow":
         return SiliconFlowEmbedding()
     raise RuntimeError(f"未知 EMBEDDING_BACKEND: {b!r}")

@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     siliconflow_api_key: str = ""
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
-    embedding_dim: int = 1024
     kb_max_upload_mb: int = 10
 
 
