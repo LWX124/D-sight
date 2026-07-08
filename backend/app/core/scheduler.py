@@ -23,6 +23,18 @@ def start_scheduler() -> AsyncIOScheduler:
         _monthly_job, CronTrigger(day=1, hour=0, minute=0, timezone="Asia/Shanghai"),
         id="monthly_credit_reset", replace_existing=True,
     )
+
+    from apscheduler.triggers.interval import IntervalTrigger
+    from app.news.job import poll_all_sources
+
+    async def _news_job():
+        n = await poll_all_sources()
+        _log.info("news poll done: %d new items", n)
+
+    _scheduler.add_job(
+        _news_job, IntervalTrigger(minutes=5),
+        id="news_poll", replace_existing=True,
+    )
     _scheduler.start()
     return _scheduler
 
