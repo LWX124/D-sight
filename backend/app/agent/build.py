@@ -199,7 +199,7 @@ def make_checkpointer(database_url: str):
     return AsyncPostgresSaver.from_conn_string(url)
 
 
-def build_agent(thread_id: str, checkpointer=None, skill_rows=None):
+def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None, user_id=None):
     ws = get_thread_workspace(thread_id)
     if skill_rows is not None:
         from app.skills.materialize import write_skills
@@ -209,9 +209,15 @@ def build_agent(thread_id: str, checkpointer=None, skill_rows=None):
     # 使 skill_rows=None 的直连调用（test_real_smoke 等）也能组装。
     (ws / "skills").mkdir(exist_ok=True)
     prompt = SYSTEM_PROMPT + f"\n当前日期：{dt.date.today().isoformat()}（做时效判断时以此为准）"
+    tools = [web_search, fetch_page, stock_quote, stock_financials, make_run_python(ws)]
+    if kb_ids and user_id is not None:
+        from app.agent.tools.kb import make_kb_search
+        from app.core.db import get_sessionmaker
+
+        tools.append(make_kb_search(get_sessionmaker(), user_id, kb_ids))
     return create_deep_agent(
         model=_make_model(),
-        tools=[web_search, fetch_page, stock_quote, stock_financials, make_run_python(ws)],
+        tools=tools,
         backend=make_backend(ws),
         skills=[str(ws / "skills")],
         system_prompt=prompt,
