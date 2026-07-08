@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     min_charge: int = 1
     redis_url: str = "redis://localhost:6381/0"
     rate_limit_per_min: int = 20
+    embedding_backend: str = "fake"        # fake / siliconflow
+    siliconflow_api_key: str = ""
+    embedding_model: str = "BAAI/bge-m3"
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    embedding_dim: int = 1024
 
 
 @lru_cache
