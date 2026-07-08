@@ -7,6 +7,7 @@ import ChatPage from "@/pages/ChatPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import SkillsPage from "@/pages/SkillsPage";
+import KbPage from "@/pages/KbPage";
 
 const qc = new QueryClient();
 
@@ -56,6 +57,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <SkillsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/kb"
+            element={
+              <RequireAuth>
+                <KbPage />
               </RequireAuth>
             }
           />

@@ -91,7 +91,15 @@ async def chat(
     from app.skills.materialize import load_installed_skills
 
     skill_rows = await load_installed_skills(db, user.id)
-    agent = build_agent(thread_id, checkpointer, skill_rows=skill_rows)
+    mounted: list[uuid.UUID] = []
+    for x in (request.mounted_kb_ids or []):
+        try:
+            mounted.append(uuid.UUID(x))
+        except ValueError:
+            pass
+    agent = build_agent(
+        thread_id, checkpointer, skill_rows=skill_rows, kb_ids=mounted, user_id=user.id
+    )
 
     async def run_callback(controller: RunController):
         if controller.state is None:

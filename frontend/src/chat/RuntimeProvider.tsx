@@ -15,6 +15,7 @@ import {
   type LangChainMessage,
 } from "@assistant-ui/react-langgraph";
 import { ensureFreshToken, loadInitialState } from "./history";
+import { getMountedKbIds } from "@/lib/kbMount";
 
 interface State {
   messages: LangChainMessage[];
@@ -108,8 +109,9 @@ function RuntimeInner({
     headers: async () => ({
       Authorization: `Bearer ${(await ensureFreshToken()) ?? ""}`,
     }),
-    // 适配 3：body 携带 threadId
-    body: { threadId },
+    // 适配 3：body 携带 threadId + 当前挂载的知识库 id。body 用函数形式，
+    // 每次发送时从 store 读取最新选中集合，随每条消息发送 mountedKbIds。
+    body: () => Promise.resolve({ threadId, mountedKbIds: getMountedKbIds() }),
     // 积分：onResponse 在 !ok 抛错之前拿到原始 Response（见 useAssistantTransportRuntime
     // 源码 options.onResponse?.(response) 早于 throw），故用状态码判 402 最稳，胜过解析错误消息。
     onResponse: (response) => onSendResponse?.(response.status),

@@ -46,4 +46,5 @@ class ChatRequest(BaseModel):
     system: str | None = None
     commands: list[Command]
     thread_id: str | None = Field(default=None, alias="threadId")
+    mounted_kb_ids: list[str] | None = Field(default=None, alias="mountedKbIds")
     state: Any | None = None

@@ -128,3 +128,49 @@ TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests/test_credits_flow.py -q
 ```bash
 TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests/test_skills_flow.py -q
 ```
+
+## 知识库 RAG（计划 5）
+
+**provider 抽象**（`app/kb/providers.py`）：embedding / reranker 经 `get_embedding_provider()` /
+`get_reranker()` 取用，由 env `EMBEDDING_BACKEND` 切换（默认 `fake`）：
+- `fake`：确定性离线 embedding（文本 sha256 展开成 1024 维单位向量，相同文本同向量），
+  reranker 按 query 词重合度打分——全程离线、免费、确定，用于测试/CI/E2E。
+- `siliconflow`：托管 BGE（`SILICONFLOW_API_KEY`，模型 `BAAI/bge-m3` embedding +
+  `BAAI/bge-reranker-v2-m3` rerank，`embedding_model`/`rerank_model` 可覆盖）。
+  模型选型仍是 spec 的 BGE-M3 / BGE-reranker-v2-m3，仅运行位置为外部 API；本地化部署记延后清单。
+
+**存储与索引**（`app/kb/models.py` + 迁移 `e01f2c79ec7c_kb.py`）：`kb_chunks.embedding` 为
+pgvector `vector(1024)`，建 **HNSW** 索引（`vector_cosine_ops`）供近似最近邻检索。
+四表：`kb` / `kb_documents`（状态机）/ `kb_chunks`（切片+向量）/ `kb_subscriptions`（只读引用，不复制数据）。
+
+**上传 → 异步摄取状态机**（`app/kb/router.py` + `app/kb/ingest.py`）：上传即落
+`kb_documents`（`pending`），经 BackgroundTasks 异步跑
+**解析 → 切片 → 向量化 → 入库**，状态流转 `pending → processing → ready`（异常置 `failed` 并记 `error`）。
+解析支持 **txt / md / pdf**（`app/kb/chunking.py`，pdf 走 pypdf 抽取），切片按字符窗口
+`size=800 / overlap=100`（相邻切片重叠、跳过空白）。上传限制：**≤ 10MB**（`kb_max_upload_mb`），仅 txt/md/pdf。
+
+**检索**（`app/kb/retrieval.py`）：`search_chunks(db, kb_ids, query)` 先向量召回
+**top-20**（HNSW cosine 距离排序），再 reranker 精排 **top-5**，返回带**出处**（`filename` /
+`kb_id` / `document_id` / `score`）的命中列表。`accessible_kb_ids` 校验可及范围（自有 + 已订阅且仍共享）。
+
+**挂载（聊天唯一入口）**：不做独立问答页。聊天时前端传 `mountedKbIds`（自有 + 已订阅），
+后端经 `accessible_kb_ids` 过滤后作为 `kb_ids` 装配 agent 的 `kb_search` 工具——检索仅在挂载库内进行。
+
+**共享 / 订阅**（Task 7）：owner 在详情页 `POST /api/kb/{id}/share` 生成随机 `share_slug`；
+他人 `POST /api/kb/subscribe/{slug}` 订阅（只读全库引用，不能订阅自有库）。
+owner `DELETE /api/kb/{id}/share` 关闭共享后，`accessible_kb_ids` 即刻不再放行、`/api/kb/subscribed` 亦不再列出。
+
+**端到端集成测试**：`tests/test_kb_flow.py` 串起闭环（T4/T5/T6）：真实端点上传 txt →
+轮询文档至 `ready` → `search_chunks` 命中且带出处 `filename`。另含两处 T3 补测：
+pdf 解析分支覆盖（pypdf 空白页，无新增依赖）、切片重叠 + 全文覆盖实证。
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests/test_kb_flow.py tests/test_kb_chunking.py -q
+```
+
+**注意（摄取耐久性）**：摄取走进程内 `BackgroundTasks`，进程在摄取途中重启会使文档
+滞留 `processing`（无自动恢复/重试）；变通办法为重新上传该文档；持久化队列记延后清单。
+
+**新增 env**（见 `.env.example`，均有默认值）：`EMBEDDING_BACKEND`（默认 `fake`）、
+`SILICONFLOW_API_KEY`、`EMBEDDING_MODEL`（`BAAI/bge-m3`）、`RERANK_MODEL`（`BAAI/bge-reranker-v2-m3`）、
+`KB_MAX_UPLOAD_MB`（10）。向量维度由 `app/kb/models.py` 的 `EMBEDDING_DIM` 常量单点定义（1024，与 pgvector 列一致），非 env。
