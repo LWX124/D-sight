@@ -19,6 +19,32 @@ async def test_write_skills_clears_and_writes(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_write_skills_skips_noop_rematerialize(tmp_path, monkeypatch):
+    """I2：内容一致的重复物化不得 rmtree（消除同 thread 并发 run 的清空竞态）；
+    内容不同才走清空重写。"""
+    import app.skills.materialize as mat
+
+    class Row:
+        def __init__(self, slug, body):
+            self.slug, self.body = slug, body
+    rows = [Row("a", "A正文"), Row("b", "B正文")]
+    write_skills(tmp_path, rows)  # 首次物化
+
+    calls = []
+    real = mat.shutil.rmtree
+    monkeypatch.setattr(mat.shutil, "rmtree", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+
+    write_skills(tmp_path, [Row("a", "A正文"), Row("b", "B正文")])  # 内容一致 → 免 rmtree
+    assert calls == []
+    assert (tmp_path / "skills" / "a" / "SKILL.md").read_text(encoding="utf-8") == "A正文"
+
+    write_skills(tmp_path, [Row("a", "A正文改")])  # 内容不同 → 清空重写
+    assert calls == [1]
+    assert (tmp_path / "skills" / "a" / "SKILL.md").read_text(encoding="utf-8") == "A正文改"
+    assert not (tmp_path / "skills" / "b").exists()
+
+
+@pytest.mark.asyncio
 async def test_write_skills_rejects_bad_slug(tmp_path):
     class Row:
         def __init__(self, slug, body="x"):
