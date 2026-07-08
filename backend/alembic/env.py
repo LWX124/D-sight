@@ -20,6 +20,7 @@ from app.threads import models as thread_models  # noqa: F401
 from app.credits import models as credit_models  # noqa: F401
 from app.skills import models as skill_models  # noqa: F401
 from app.kb import models as kb_models  # noqa: F401
+from app.news import models as news_models  # noqa: F401
 
 if os.environ.get("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
