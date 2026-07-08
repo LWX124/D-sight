@@ -60,8 +60,12 @@ NewsPanel (7:3 flex, h-full)
 ```
 选中 1-5 条 → 点 [时间线]
 → 纯前端：按 published_at 排序选中条目
-→ ChatStream 渲染自定义"时间线消息"（不调 LLM）
+→ NewsAssistant 切换到 TimelineView 模式（替换 ChatStream 区域显示）
+→ 渲染排序后的时间线列表，右上角有"返回"按钮退出此模式
+→ 不调 LLM，不经过 RuntimeProvider
 ```
+
+> 注：时间线视图作为独立 view mode 渲染，不注入到 RuntimeProvider 消息流，避免类型冲突。
 
 ### 功能5 — 股票分析（两档）
 
@@ -81,11 +85,14 @@ NewsPanel (7:3 flex, h-full)
 
 | 文件 | 动作 | 说明 |
 |---|---|---|
-| `frontend/src/panels/NewsAssistant.tsx` | 新建 | 替换 ChatStub，包含 ActionZone + ChatStream |
+| `frontend/src/panels/NewsAssistant.tsx` | 新建 | 替换 ChatStub，包含 ActionZone + ChatStream/TimelineView |
 | `frontend/src/panels/NewsTimeline.tsx` | 修改 | 加 checkbox，选中状态通过 props 回调 |
 | `frontend/src/panels/NewsPanel.tsx` | 修改 | 持有选中状态，传给 NewsTimeline 和 NewsAssistant |
 | `frontend/src/hooks/useNewsSelection.ts` | 新建 | 选中逻辑：5条上限、股票检测、格式化 context |
-| `backend/app/news/router.py` | 修改 | `GET /api/news` 加 `keyword: str | None` 参数 |
+| `backend/app/news/router.py` | 修改 | 加 `keyword` 参数 + 新增 `GET /api/news/thread` |
+| `backend/app/threads/models.py` | 修改 | 加 `type` 字段，默认 `"chat"` |
+| `backend/app/threads/router.py` | 修改 | `list_threads` 过滤 `type="chat"` |
+| `backend/alembic/versions/` | 新增 | threads.type 字段 migration |
 
 ## 后端改动（最小化）
 
@@ -104,15 +111,30 @@ if keyword:
 
 ```typescript
 // 正则匹配 A股6位代码、港股代码，或关键词
-const STOCK_PATTERN = /[0-9]{6}|[港股][票]|股票|期货|ETF|基金|A股|港股/
+const STOCK_PATTERN = /[0-9]{6}|股票|期货|ETF|基金|A股|港股/
 function hasStockMention(items: NewsItem[]): boolean {
   return items.some(i => STOCK_PATTERN.test(i.content + (i.title ?? "")))
 }
 ```
 
-## RuntimeProvider 隔离
+## RuntimeProvider 隔离与 ThreadId
 
-`NewsAssistant` 创建独立的 `AssistantRuntime` 实例，与主聊天页面的线程完全隔离，新闻上下文不污染主对话历史。
+`NewsAssistant` 使用独立的固定 per-user "新闻助手" thread，与主聊天线程隔离。
+
+**实现方案：**
+- `Thread` 模型新增 `type: str = "chat"` 字段（Alembic migration）
+- `list_threads` 只返回 `type="chat"` 的记录，新闻 thread 不出现在聊天侧边栏
+- 新增后端端点 `GET /api/news/thread`（get-or-create）：查询当前用户的 `type="news"` thread，不存在则创建，返回 threadId
+- NewsAssistant 挂载时调用此端点取 threadId，再初始化 `RuntimeProvider`
+
+**文件变更补充：**
+
+| 文件 | 动作 |
+|---|---|
+| `backend/app/threads/models.py` | 加 `type` 字段，默认 `"chat"` |
+| `backend/app/threads/router.py` | `list_threads` 加 `type="chat"` 过滤 |
+| `backend/app/news/router.py` | 新增 `GET /api/news/thread` get-or-create |
+| `alembic/versions/` | 新增 migration：threads.type 字段 |
 
 ## 错误处理
 
