@@ -5,12 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.deps import require_admin
-from app.admin.schemas import CreditAdjust, PlanChange, SkillUpdate
+from app.admin.schemas import (
+    CreditAdjust,
+    NewsSourceCreate,
+    NewsSourceUpdate,
+    PlanChange,
+    SkillUpdate,
+)
 from app.auth.models import User
 from app.core.db import get_db
 from app.credits import service
 from app.credits.models import AdminAuditLog
 from app.credits.pricing import quota_for_plan
+from app.news.models import NewsSource
 from app.skills.models import Skill
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -82,3 +89,51 @@ async def update_skill(
     ))
     await db.commit()
     return {"slug": s.slug, "is_active": s.is_active, "price": s.price}
+
+
+@router.post("/news/sources")
+async def create_news_source(
+    body: NewsSourceCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    src = NewsSource(name=body.name, type=body.type, channel=body.channel,
+                     config=body.config, interval_seconds=body.interval_seconds)
+    db.add(src)
+    db.add(AdminAuditLog(admin_id=admin.id, action="news_source_create",
+                         target_type="news_source", target_id=body.name, detail={"type": body.type}))
+    await db.commit()
+    return {"id": str(src.id), "name": src.name, "enabled": src.enabled}
+
+
+@router.get("/news/sources")
+async def list_news_sources(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(NewsSource).order_by(NewsSource.created_at))).scalars().all()
+    return [{"id": str(s.id), "name": s.name, "type": s.type, "channel": s.channel,
+             "enabled": s.enabled, "interval_seconds": s.interval_seconds} for s in rows]
+
+
+@router.patch("/news/sources/{source_id}")
+async def update_news_source(
+    source_id: str, body: NewsSourceUpdate,
+    admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db),
+):
+    try:
+        sid = uuid.UUID(source_id)
+    except ValueError:
+        raise HTTPException(404, "信源不存在")
+    src = await db.get(NewsSource, sid)
+    if src is None:
+        raise HTTPException(404, "信源不存在")
+    changes = {}
+    if body.enabled is not None:
+        src.enabled = body.enabled
+        changes["enabled"] = body.enabled
+    if body.config is not None:
+        src.config = body.config
+        changes["config"] = True
+    if body.interval_seconds is not None:
+        src.interval_seconds = body.interval_seconds
+        changes["interval_seconds"] = body.interval_seconds
+    db.add(AdminAuditLog(admin_id=admin.id, action="news_source_update",
+                         target_type="news_source", target_id=source_id, detail=changes))
+    await db.commit()
+    return {"id": str(src.id), "enabled": src.enabled}

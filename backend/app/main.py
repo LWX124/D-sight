@@ -11,6 +11,7 @@ from app.chat.router import router as chat_router
 from app.core.config import get_settings
 from app.credits.router import router as credits_router
 from app.kb.router import router as kb_router
+from app.news.router import router as news_router
 from app.skills.router import router as skills_router
 from app.threads.router import router as threads_router
 
@@ -53,4 +54,5 @@ def create_app() -> FastAPI:
     app.include_router(credits_router)
     app.include_router(skills_router)
     app.include_router(kb_router)
+    app.include_router(news_router)
     return app

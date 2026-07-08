@@ -174,3 +174,46 @@ TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests/test_kb_flow.py tests/test
 **新增 env**（见 `.env.example`，均有默认值）：`EMBEDDING_BACKEND`（默认 `fake`）、
 `SILICONFLOW_API_KEY`、`EMBEDDING_MODEL`（`BAAI/bge-m3`）、`RERANK_MODEL`（`BAAI/bge-reranker-v2-m3`）、
 `KB_MAX_UPLOAD_MB`（10）。向量维度由 `app/kb/models.py` 的 `EMBEDDING_DIM` 常量单点定义（1024，与 pgvector 列一致），非 env。
+
+## 新闻热点（计划 6）
+
+**信源抽象**（`app/news/sources.py`）：`NewsSource(ABC).fetch(config) -> list[RawItem]`，
+按 `type` 经 `get_source(type_)` 取实现。内置两类：
+- `fake`：离线确定性信源，`config.items[]` 可注入自定义快讯（`external_id` / `content` /
+  `published_at` 等）。注意 **`published_at` 在 `config`(JSONB) 中须为 ISO 字符串**——JSONB
+  无法序列化 `datetime`，`FakeSource` 会把 `str` 反解回 `datetime`。无 `items` 时回退两条样例。
+- `sina_live`：新浪 7x24 快讯（默认对应 `zhibo.sina.com.cn` feed 形态，地址/params/解析路径
+  经 `config` 配置化）。真实网络抓取仅在设 `RUN_NEWS_LIVE=1` 时手动 smoke 验证，不入常规 CI。
+
+**5 分钟抓取**（`app/news/job.py` + APScheduler）：`poll_all_sources()` 遍历 `enabled` 信源、
+逐源 `ingest_source` 且**单源失败隔离**（一源异常不影响其余），调度间隔 5 分钟。
+
+**去重摄取**（`app/news/ingest.py`）：按 `(source_id, external_id)` 唯一约束跳过重复；
+另存 `content_hash`（`sha256(content)`）为后续跨源内容去重预留。
+
+**快讯 Feed API**（`app/news/router.py`）：`GET /api/news?channel=&limit=&before=&after=`——
+按 `published_at` 倒序，`before`/`after` 做游标分页与 30s 轮询增量；`limit` 受 `ge=1,le=50`
+约束（下界拦住 `LIMIT -1` 打到 Postgres 报 500，越界返回 422）。
+
+**news_query 工具**（`app/agent/tools/news.py`）：`make_news_query(session_factory)` 产出
+按**时间窗（hours）+ 关键词**查快讯库的 agent 工具，装配进聊天，用于「当日最新信息总结」。
+
+**admin 信源 CRUD**（`app/news/router.py`）：`POST/GET/PATCH /api/admin/news/sources`——
+新增一个信源 = 插一条 `news_sources` 记录（名称/类型/channel/config/enabled/interval）+ 写一个
+`NewsSource` 子类；无需改抓取主流程。
+
+**social channel（仅架构预留）**：`news_items.channel` 区分 `news` / `social`，前端按 channel
+分 tab；社媒（小红书/微博/公众号/B站）具体抓取**当前不实现**，仅留下 channel 架构位。
+
+**端到端集成测试**：`tests/test_news_flow.py` 串起闭环（T2/T3/T4/T5）：建 `fake` 信源（注入
+自定义快讯）→ `poll_all_sources()` 入库 → `GET /api/news` 可见 → `news_query` 命中。
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true uv run pytest tests/test_news_flow.py tests/test_news_api.py -q
+```
+
+**新增 env**：`NEWS_BACKEND`（信源默认类型，`fake` / `sina_live`）、`RUN_NEWS_LIVE`（设 `1`
+才跑新浪真实抓取的手动 smoke）。
+
+**注意（调度耐久性）**：抓取走进程内 APScheduler，进程重启期间会漏抓当周期，下周期补上、
+不追溯历史；持久化调度记延后清单（与计划 5 摄取耐久性同属部署硬化）。

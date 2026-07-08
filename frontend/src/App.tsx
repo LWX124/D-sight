@@ -8,6 +8,7 @@ import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import SkillsPage from "@/pages/SkillsPage";
 import KbPage from "@/pages/KbPage";
+import NewsPage from "@/pages/NewsPage";
 
 const qc = new QueryClient();
 
@@ -65,6 +66,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <KbPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/news"
+            element={
+              <RequireAuth>
+                <NewsPage />
               </RequireAuth>
             }
           />
