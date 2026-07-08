@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     kb_max_upload_mb: int = 10
+    news_backend: str = "fake"
 
 
 @lru_cache
