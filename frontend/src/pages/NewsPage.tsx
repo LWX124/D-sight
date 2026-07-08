@@ -70,6 +70,13 @@ export default function NewsPage() {
     queryKey: ["news", channel],
     queryFn: () => fetchNews({ channel }),
     enabled: channel === "news",
+    // The initial query is just the first page; the 30s poll (`after` cursor)
+    // is the live-update mechanism. Refetching on window focus would replace
+    // `data` with a fresh page-1 array and the seed effect would reset the
+    // list, discarding infinite-scroll progress. Channel switching still
+    // resets to page 1 via the seed effect's `channel` dependency.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   // Seed the manual list from the initial query result (per channel).
