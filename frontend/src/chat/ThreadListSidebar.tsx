@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Store, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -166,6 +167,16 @@ export function ThreadListSidebar({
           );
         })}
       </nav>
+      <div className="border-t border-border p-2">
+        <Link
+          to="/skills"
+          data-testid="nav-skills"
+          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+        >
+          <Store className="size-4" />
+          技能市场
+        </Link>
+      </div>
     </aside>
   );
 }

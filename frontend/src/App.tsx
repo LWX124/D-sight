@@ -6,6 +6,7 @@ import { tryRefresh } from "@/lib/api";
 import ChatPage from "@/pages/ChatPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
+import SkillsPage from "@/pages/SkillsPage";
 
 const qc = new QueryClient();
 
@@ -47,6 +48,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <ChatPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/skills"
+            element={
+              <RequireAuth>
+                <SkillsPage />
               </RequireAuth>
             }
           />
