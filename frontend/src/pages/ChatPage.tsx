@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
+import { KbMountSelector } from "@/chat/KbMountSelector";
 import { creditsKey, fetchCredits } from "@/lib/credits";
 
 async function listThreads(): Promise<ThreadT[]> {
@@ -75,6 +76,7 @@ export default function ChatPage() {
         <header className="flex items-center justify-between border-b border-border px-4 py-2">
           <span className="text-sm font-medium text-foreground">D-sight</span>
           <div className="flex items-center gap-3">
+            <KbMountSelector />
             {credits && (
               <span
                 data-testid="credit-badge"
