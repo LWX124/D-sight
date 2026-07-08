@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/news", tags=["news"])
 @router.get("", response_model=list[NewsItemOut])
 async def list_news(
     channel: str = "news",
-    limit: int = Query(20, le=50),
+    limit: int = Query(20, ge=1, le=50),
     before: dt.datetime | None = None,
     after: dt.datetime | None = None,
     user: User = Depends(get_current_user),

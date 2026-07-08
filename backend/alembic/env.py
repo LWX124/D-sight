@@ -31,6 +31,10 @@ def include_object(obj, name, type_, reflected, compare_to):
     # LangGraph checkpointer 自管表，autogenerate 不得 DROP
     if type_ == "table" and name.startswith("checkpoint"):
         return False
+    # pgvector HNSW 索引由迁移手写、不在 model metadata 中，autogenerate 会误判为
+    # 待删除；这里恒过滤，避免每张 news/kb 迁移都刷出 drop_index 的脚枪。
+    if type_ == "index" and name == "ix_kb_chunks_embedding":
+        return False
     return True
 
 # Interpret the config file for Python logging.

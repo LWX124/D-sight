@@ -30,7 +30,13 @@ async def _seed_news(db, n=3):
 async def test_list_news_desc_and_pagination(client, db_session, registered_user):
     s, base = await _seed_news(db_session, 3)
     h = _auth(registered_user)
-    r = await client.get("/api/news?channel=news&limit=2", headers=h)
+    # DB 跨用例不回滚：用 after/before 把查询夹到本用例的 base 窗口，避免其它用例（如闭环测试）
+    # 写入的 now 时间戳快讯抢占倒序头部导致断言漂移。params 保证 +00:00 正确编码。
+    lo = (base - dt.timedelta(seconds=1)).isoformat()
+    hi = (base + dt.timedelta(minutes=3)).isoformat()
+    r = await client.get(
+        "/api/news", params={"channel": "news", "limit": 2, "after": lo, "before": hi}, headers=h
+    )
     assert r.status_code == 200
     items = r.json()
     assert len(items) == 2

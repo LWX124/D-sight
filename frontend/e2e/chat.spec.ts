@@ -42,4 +42,10 @@ test("注册登录并收到流式回复", async ({ page, request }) => {
   await page.getByTestId("nav-kb").click();
   await expect(page).toHaveURL(/\/kb$/);
   await expect(page.getByTestId("kb-create")).toBeVisible({ timeout: 30_000 });
+
+  // 快讯页冒烟（best-effort，计划 6）：返回聊天页，点 nav-news → /news，断言 news tab 可见。
+  await page.goBack();
+  await page.getByTestId("nav-news").click();
+  await expect(page).toHaveURL(/\/news$/);
+  await expect(page.getByTestId("news-tab-news")).toBeVisible({ timeout: 30_000 });
 });
