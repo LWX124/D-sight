@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Library, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
+import { Library, MessageSquare, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type Thread = {
@@ -12,6 +10,8 @@ export type Thread = {
   created_at: string;
   updated_at: string;
 };
+
+export type Panel = "chat" | "news" | "social" | "kb" | "skills";
 
 export const threadsKey = ["threads"] as const;
 
@@ -46,12 +46,24 @@ async function deleteThread(id: string): Promise<void> {
   if (!r.ok) throw new Error("删除失败");
 }
 
+const NAV_ITEMS: { panel: Panel; icon: typeof MessageSquare; label: string; testId: string }[] = [
+  { panel: "chat", icon: MessageSquare, label: "对话", testId: "nav-chat" },
+  { panel: "news", icon: Newspaper, label: "7x24h", testId: "nav-news" },
+  { panel: "social", icon: Newspaper, label: "社媒信息", testId: "nav-social" },
+  { panel: "kb", icon: Library, label: "知识库", testId: "nav-kb" },
+  { panel: "skills", icon: Store, label: "技能市场", testId: "nav-skills" },
+];
+
 export function ThreadListSidebar({
   activeThreadId,
+  activePanel,
   onSelect,
+  onPanelChange,
 }: {
   activeThreadId: string | null;
+  activePanel: Panel;
   onSelect: (id: string) => void;
+  onPanelChange: (panel: Panel) => void;
 }) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,6 +79,7 @@ export function ThreadListSidebar({
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: threadsKey });
       onSelect(t.id);
+      onPanelChange("chat");
     },
   });
 
@@ -90,36 +103,74 @@ export function ThreadListSidebar({
   }
 
   return (
-    <aside className="flex h-svh w-64 shrink-0 flex-col border-r border-border bg-muted/30">
-      <div className="p-3">
-        <Button
-          className="w-full justify-start gap-2"
+    <aside className="flex h-svh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
+      {/* Logo / Brand */}
+      <div className="flex items-center gap-2 px-4 py-4">
+        <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <span className="text-xs font-semibold">D</span>
+        </div>
+        <span className="text-sm font-semibold tracking-tight text-foreground">D-sight</span>
+      </div>
+
+      {/* Navigation */}
+      <nav className="space-y-0.5 px-2">
+        {NAV_ITEMS.map(({ panel, icon: Icon, label, testId }) => (
+          <button
+            key={panel}
+            type="button"
+            data-testid={testId}
+            onClick={() => onPanelChange(panel)}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
+              activePanel === panel
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+            )}
+          >
+            <Icon className="size-4" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Divider + Thread list */}
+      <div className="mx-3 my-3 border-t border-sidebar-border" />
+
+      <div className="flex items-center justify-between px-3 pb-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
+          会话
+        </span>
+        <button
+          type="button"
           onClick={() => create.mutate()}
           disabled={create.isPending}
+          className="rounded-md p-0.5 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
-          <Plus className="size-4" />
-          新建会话
-        </Button>
+          <Plus className="size-3.5" />
+        </button>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
-        {isLoading && <p className="px-2 py-1 text-sm text-muted-foreground">加载中…</p>}
+
+      <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+        {isLoading && <p className="px-2 py-1 text-xs text-muted-foreground">加载中…</p>}
         {!isLoading && threads.length === 0 && (
-          <p className="px-2 py-1 text-sm text-muted-foreground">暂无会话</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground">暂无会话</p>
         )}
         {threads.map((t) => {
-          const active = t.id === activeThreadId;
+          const active = t.id === activeThreadId && activePanel === "chat";
           return (
             <div
               key={t.id}
               className={cn(
-                "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm",
-                active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+                "group flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px]",
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50",
               )}
             >
               {editingId === t.id ? (
                 <input
                   autoFocus
-                  className="min-w-0 flex-1 rounded border border-input bg-background px-1 py-0.5 text-sm outline-none"
+                  className="min-w-0 flex-1 rounded border border-input bg-background px-1 py-0.5 text-xs outline-none"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={() => commitRename(t.id)}
@@ -133,7 +184,10 @@ export function ThreadListSidebar({
                   type="button"
                   className="min-w-0 flex-1 truncate text-left"
                   title={t.title}
-                  onClick={() => onSelect(t.id)}
+                  onClick={() => {
+                    onSelect(t.id);
+                    onPanelChange("chat");
+                  }}
                   onDoubleClick={() => {
                     setEditingId(t.id);
                     setDraft(t.title);
@@ -145,53 +199,27 @@ export function ThreadListSidebar({
               <button
                 type="button"
                 aria-label="重命名"
-                className="hidden shrink-0 rounded p-1 text-muted-foreground hover:text-foreground group-hover:block"
+                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground group-hover:block"
                 onClick={() => {
                   setEditingId(t.id);
                   setDraft(t.title);
                 }}
               >
-                <Pencil className="size-3.5" />
+                <Pencil className="size-3" />
               </button>
               <button
                 type="button"
                 aria-label="删除"
-                className="hidden shrink-0 rounded p-1 text-muted-foreground hover:text-destructive group-hover:block"
+                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:block"
                 onClick={() => {
                   if (confirm(`删除会话「${t.title}」？`)) remove.mutate(t.id);
                 }}
               >
-                <Trash2 className="size-3.5" />
+                <Trash2 className="size-3" />
               </button>
             </div>
           );
         })}
-      </nav>
-      <div className="space-y-1 border-t border-border p-2">
-        <Link
-          to="/news"
-          data-testid="nav-news"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-        >
-          <Newspaper className="size-4" />
-          快讯
-        </Link>
-        <Link
-          to="/kb"
-          data-testid="nav-kb"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-        >
-          <Library className="size-4" />
-          知识库
-        </Link>
-        <Link
-          to="/skills"
-          data-testid="nav-skills"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-        >
-          <Store className="size-4" />
-          技能市场
-        </Link>
       </div>
     </aside>
   );

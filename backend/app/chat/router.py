@@ -77,10 +77,12 @@ async def chat(
 
     if not await check_rate(str(user.id)):
         raise HTTPException(429, "请求过于频繁")
-    try:
-        await service.precheck(db, user.id, need=get_settings().min_charge)
-    except service.InsufficientCredits:
-        raise HTTPException(402, "积分不足")
+    is_admin = user.role == "admin"
+    if not is_admin:
+        try:
+            await service.precheck(db, user.id, need=get_settings().min_charge)
+        except service.InsufficientCredits:
+            raise HTTPException(402, "积分不足")
     input_messages, first_text = _extract_inputs(request)
     if thread.title == "新对话" and first_text:
         thread.title = first_text[:TITLE_MAX]
@@ -142,7 +144,7 @@ async def chat(
                 else math.ceil(max(0, total) / get_settings().tokens_per_credit)
             )
             async with get_sessionmaker()() as s:
-                if credits_due > 0:
+                if credits_due > 0 and not is_admin:
                     await service.charge(
                         s, user.id, credits_due,
                         kind="chat", ref_type="thread", ref_id=thread_id,
@@ -155,7 +157,7 @@ async def chat(
                 all_msgs = list(controller.state.get("messages") or [])
                 used = extract_used_skills(all_msgs[baseline:])
                 used &= {r.slug for r in skill_rows}
-                if used:
+                if used and not is_admin:
                     from sqlalchemy import select as _select
 
                     from app.skills.models import Skill

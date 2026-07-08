@@ -25,19 +25,26 @@ async function renderSidebar(activeThreadId: string | null = "t1") {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <ThreadListSidebar activeThreadId={activeThreadId} onSelect={() => {}} />
+        <ThreadListSidebar
+          activeThreadId={activeThreadId}
+          activePanel="chat"
+          onSelect={() => {}}
+          onPanelChange={() => {}}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 describe("ThreadListSidebar 列表渲染", () => {
-  it("渲染两条会话标题与新建按钮", async () => {
+  it("渲染两条会话标题与导航项", async () => {
     await renderSidebar();
-    expect(screen.getByRole("button", { name: /新建会话/ })).toBeTruthy();
+    expect(screen.getByText("会话")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByText("茅台现在多少钱")).toBeTruthy();
       expect(screen.getByText("第二个会话")).toBeTruthy();
     });
+    expect(screen.getByTestId("nav-chat")).toBeTruthy();
+    expect(screen.getByTestId("nav-skills")).toBeTruthy();
   });
 });

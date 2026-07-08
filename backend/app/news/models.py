@@ -19,7 +19,7 @@ class NewsSource(Base):
     channel: Mapped[str] = mapped_column(String(16), nullable=False, default="news")  # news / social
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -6,16 +6,11 @@ import { tryRefresh } from "@/lib/api";
 import ChatPage from "@/pages/ChatPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
-import SkillsPage from "@/pages/SkillsPage";
-import KbPage from "@/pages/KbPage";
-import NewsPage from "@/pages/NewsPage";
 
 const qc = new QueryClient();
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.accessToken);
-  // 页面刷新后内存中的 access token 会丢失；首次挂载且无 token 时，
-  // 先用 refresh cookie 静默换取新 access，避免刷新即被登出。
   const [checking, setChecking] = useState(token === null);
 
   useEffect(() => {
@@ -30,7 +25,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-    // 仅在首次挂载执行一次刷新尝试
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -46,34 +40,10 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
-            path="/"
+            path="/*"
             element={
               <RequireAuth>
                 <ChatPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/skills"
-            element={
-              <RequireAuth>
-                <SkillsPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/kb"
-            element={
-              <RequireAuth>
-                <KbPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/news"
-            element={
-              <RequireAuth>
-                <NewsPage />
               </RequireAuth>
             }
           />

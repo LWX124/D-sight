@@ -6,9 +6,13 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
-import { ThreadListSidebar, threadsKey, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
+import { ThreadListSidebar, threadsKey, type Panel, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
 import { KbMountSelector } from "@/chat/KbMountSelector";
 import { creditsKey, fetchCredits } from "@/lib/credits";
+import NewsPanel from "@/panels/NewsPanel";
+import SocialPanel from "@/panels/SocialPanel";
+import KbPanel from "@/panels/KbPanel";
+import SkillsPanel from "@/panels/SkillsPanel";
 
 async function listThreads(): Promise<ThreadT[]> {
   const r = await apiFetch("/api/threads/");
@@ -26,10 +30,19 @@ async function createThread(): Promise<ThreadT> {
   return r.json();
 }
 
+const PANEL_TITLES: Record<Panel, string> = {
+  chat: "对话",
+  news: "7x24h",
+  social: "社媒信息",
+  kb: "知识库",
+  skills: "技能市场",
+};
+
 export default function ChatPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<Panel>("chat");
   const [creditNotice, setCreditNotice] = useState(false);
   const autoCreating = useRef(false);
 
@@ -48,7 +61,6 @@ export default function ChatPage() {
     },
   });
 
-  // 无选中会话时：有会话则选第一条；无会话则自动建一个（ref 去重，避免并发重复创建）。
   useEffect(() => {
     if (!threads) return;
     const stillExists = activeThreadId && threads.some((t) => t.id === activeThreadId);
@@ -70,23 +82,27 @@ export default function ChatPage() {
     <div className="flex h-svh bg-background">
       <ThreadListSidebar
         activeThreadId={activeThreadId}
+        activePanel={activePanel}
         onSelect={(id) => setActiveThreadId(id || null)}
+        onPanelChange={setActivePanel}
       />
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-sm font-medium text-foreground">D-sight</span>
+        <header className="flex h-12 items-center justify-between border-b border-border px-5">
+          <span className="text-sm font-medium text-foreground">
+            {PANEL_TITLES[activePanel]}
+          </span>
           <div className="flex items-center gap-3">
-            <KbMountSelector />
+            {activePanel === "chat" && <KbMountSelector />}
             {credits && (
               <span
                 data-testid="credit-badge"
                 className="text-xs text-muted-foreground tabular-nums"
               >
-                余额 {credits.balance}/{credits.monthly_quota}
+                {credits.balance}/{credits.monthly_quota}
               </span>
             )}
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              退出登录
+            <Button variant="ghost" size="sm" onClick={onLogout}>
+              退出
             </Button>
           </div>
         </header>
@@ -99,22 +115,30 @@ export default function ChatPage() {
           </div>
         )}
         <div className="min-h-0 flex-1">
-          {activeThreadId ? (
-            <RuntimeProvider
-              key={activeThreadId}
-              threadId={activeThreadId}
-              onSendResponse={(status) => setCreditNotice(status === 402)}
-              onFinish={() => {
-                qc.invalidateQueries({ queryKey: creditsKey });
-              }}
-            >
-              <Thread />
-            </RuntimeProvider>
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              正在准备会话…
-            </div>
+          {activePanel === "chat" && (
+            <>
+              {activeThreadId ? (
+                <RuntimeProvider
+                  key={activeThreadId}
+                  threadId={activeThreadId}
+                  onSendResponse={(status) => setCreditNotice(status === 402)}
+                  onFinish={() => {
+                    qc.invalidateQueries({ queryKey: creditsKey });
+                  }}
+                >
+                  <Thread />
+                </RuntimeProvider>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  正在准备会话…
+                </div>
+              )}
+            </>
           )}
+          {activePanel === "news" && <NewsPanel />}
+          {activePanel === "social" && <SocialPanel />}
+          {activePanel === "kb" && <KbPanel />}
+          {activePanel === "skills" && <SkillsPanel />}
         </div>
       </main>
     </div>

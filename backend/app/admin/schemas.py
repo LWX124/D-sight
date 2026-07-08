@@ -21,7 +21,7 @@ class NewsSourceCreate(BaseModel):
     type: str
     channel: str = "news"
     config: dict = {}
-    interval_seconds: int = 300
+    interval_seconds: int = 120
 
 
 class NewsSourceUpdate(BaseModel):

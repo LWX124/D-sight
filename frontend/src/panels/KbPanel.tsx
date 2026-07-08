@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import {
   createKb,
   fetchDocs,
@@ -53,7 +52,6 @@ function DocList({ kbId }: { kbId: string }) {
   const { data: docs = [] } = useQuery({
     queryKey: ["kb-docs", kbId],
     queryFn: () => fetchDocs(kbId),
-    // 有文档处于 pending/processing 时轮询，直到全部 ready/failed。
     refetchInterval: (query) => {
       const list = (query.state.data as KbDoc[] | undefined) ?? [];
       return list.some((d) => d.status === "pending" || d.status === "processing")
@@ -104,7 +102,7 @@ function KbCard({ kb }: { kb: Kb }) {
   });
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col rounded-xl">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate">{kb.name}</span>
@@ -157,7 +155,7 @@ function KbCard({ kb }: { kb: Kb }) {
   );
 }
 
-export default function KbPage() {
+export default function KbPanel() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -187,19 +185,8 @@ export default function KbPage() {
   });
 
   return (
-    <div className="min-h-svh bg-background">
-      <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm" data-testid="kb-back">
-            <Link to="/">
-              <ArrowLeft className="size-4" />
-              返回聊天
-            </Link>
-          </Button>
-          <span className="text-sm font-medium text-foreground">知识库</span>
-        </div>
-      </header>
-      <main className="mx-auto max-w-5xl space-y-6 p-4">
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-5xl space-y-6 p-5">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex items-end gap-2">
             <Input
@@ -256,7 +243,7 @@ export default function KbPage() {
             ))}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

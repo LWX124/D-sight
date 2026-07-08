@@ -24,3 +24,11 @@ export async function fetchNews(opts: {
   if (!r.ok) throw new Error("failed to load news");
   return r.json();
 }
+
+export async function refreshNews(channel = "news"): Promise<NewsItem[]> {
+  const r = await apiFetch(`/api/news/refresh?channel=${channel}`, {
+    method: "POST",
+  });
+  if (!r.ok) throw new Error("failed to refresh news");
+  return r.json();
+}

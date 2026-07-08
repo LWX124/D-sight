@@ -7,7 +7,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {
-    proxy: { "/api": { target: "http://localhost:8000", changeOrigin: false } },
+    // /api 代理到后端；端口默认 8000，可用 BACKEND_PORT 覆盖（与 dev.sh 一致）。
+    proxy: {
+      "/api": {
+        target: `http://localhost:${process.env.BACKEND_PORT ?? 8010}`,
+        changeOrigin: false,
+      },
+    },
   },
   // @ts-expect-error vitest 扩展字段
   test: {

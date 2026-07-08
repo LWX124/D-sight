@@ -32,7 +32,7 @@ def start_scheduler() -> AsyncIOScheduler:
         _log.info("news poll done: %d new items", n)
 
     _scheduler.add_job(
-        _news_job, IntervalTrigger(minutes=5),
+        _news_job, IntervalTrigger(minutes=2),
         id="news_poll", replace_existing=True,
     )
     _scheduler.start()
