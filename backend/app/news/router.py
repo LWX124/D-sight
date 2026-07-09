@@ -13,12 +13,35 @@ from app.news.schemas import NewsItemOut
 router = APIRouter(prefix="/api/news", tags=["news"])
 
 
+@router.get("/thread")
+async def get_news_thread(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.threads.models import Thread
+    result = await db.execute(
+        select(Thread).where(
+            Thread.user_id == user.id,
+            Thread.type == "news",
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if thread is None:
+        thread = Thread(user_id=user.id, title="新闻助手", type="news")
+        db.add(thread)
+        await db.commit()
+        await db.refresh(thread)
+    return {"thread_id": str(thread.id)}
+
+
 @router.get("", response_model=list[NewsItemOut])
 async def list_news(
     channel: str = "news",
     limit: int = Query(20, ge=1, le=50),
     before: dt.datetime | None = None,
     after: dt.datetime | None = None,
+    keyword: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -27,6 +50,10 @@ async def list_news(
         q = q.where(NewsItem.published_at < before)
     if after is not None:
         q = q.where(NewsItem.published_at > after)
+    if keyword:
+        q = q.where(
+            NewsItem.content.ilike(f"%{keyword}%") | NewsItem.title.ilike(f"%{keyword}%")
+        )
     q = q.order_by(NewsItem.published_at.desc()).limit(limit)
     rows = (await db.execute(q)).scalars().all()
     return [
