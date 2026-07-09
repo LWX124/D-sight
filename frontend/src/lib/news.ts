@@ -14,15 +14,24 @@ export async function fetchNews(opts: {
   before?: string;
   after?: string;
   limit?: number;
+  keyword?: string;
 } = {}): Promise<NewsItem[]> {
   const p = new URLSearchParams();
   p.set("channel", opts.channel ?? "news");
   if (opts.before) p.set("before", opts.before);
   if (opts.after) p.set("after", opts.after);
   if (opts.limit) p.set("limit", String(opts.limit));
+  if (opts.keyword) p.set("keyword", opts.keyword);
   const r = await apiFetch(`/api/news?${p.toString()}`);
   if (!r.ok) throw new Error("failed to load news");
   return r.json();
+}
+
+export async function fetchNewsThreadId(): Promise<string> {
+  const r = await apiFetch("/api/news/thread");
+  if (!r.ok) throw new Error("failed to get news thread");
+  const data = await r.json();
+  return data.thread_id;
 }
 
 export async function refreshNews(channel = "news"): Promise<NewsItem[]> {

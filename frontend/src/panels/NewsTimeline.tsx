@@ -53,7 +53,13 @@ function LoadingSkeleton() {
   );
 }
 
-export default function NewsTimeline() {
+interface NewsTimelineProps {
+  selectedIds: Set<string>;
+  onToggle: (item: NewsItem) => void;
+  isFull: boolean;
+}
+
+export default function NewsTimeline({ selectedIds, onToggle, isFull }: NewsTimelineProps) {
   const [items, setItems] = useState<NewsItem[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -225,7 +231,7 @@ export default function NewsTimeline() {
                 </div>
 
                 {/* Timeline items */}
-                <div className="relative ml-1.5 border-l border-border/50 pl-5">
+                <div className="relative ml-1.5 border-l border-border/50 pl-8">
                   {group.items.map((item, idx) => {
                     const isFirst = gi === 0 && idx === 0;
                     const CardWrapper = item.url ? "a" : "div";
@@ -235,6 +241,21 @@ export default function NewsTimeline() {
 
                     return (
                       <div key={item.id} className="relative pb-4 last:pb-1" data-testid="news-item">
+                        {/* Checkbox */}
+                        <label
+                          className="absolute -left-[38px] top-[5px] flex items-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item.id)}
+                            disabled={isFull && !selectedIds.has(item.id)}
+                            onChange={() => onToggle(item)}
+                            title={isFull && !selectedIds.has(item.id) ? "最多选5条" : undefined}
+                            className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                        </label>
+
                         {/* Dot */}
                         <div className={`absolute -left-[21px] top-[7px] flex h-2 w-2 items-center justify-center ${isFirst ? "" : ""}`}>
                           {isFirst ? (

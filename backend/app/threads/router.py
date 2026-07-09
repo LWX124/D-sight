@@ -49,7 +49,11 @@ async def list_threads(
 ) -> list[ThreadOut]:
     rows = await db.scalars(
         select(Thread)
-        .where(Thread.user_id == user.id, Thread.deleted_at.is_(None))
+        .where(
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+            Thread.type == "chat",
+        )
         .order_by(Thread.updated_at.desc())
     )
     return [_out(t) for t in rows]
