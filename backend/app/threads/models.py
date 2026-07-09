@@ -23,3 +23,4 @@ class Thread(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    type: Mapped[str] = mapped_column(String(20), default="chat", server_default="chat")
