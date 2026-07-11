@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    app_env: str = "dev"
     database_url: str = "postgresql+asyncpg://dsight:dsight@localhost:5434/dsight"
     jwt_secret: str = "dev-secret"
     jwt_refresh_secret: str = "dev-refresh-secret"
@@ -34,6 +35,10 @@ class Settings(BaseSettings):
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     kb_max_upload_mb: int = 10
     news_backend: str = "fake"
+    # Fernet 密钥（base64 urlsafe 32 字节）。留空则用 dev 默认（仅测试/本地）。
+    social_encryption_key: str = "ZHNpZ2h0LXNvY2lhbC1kZXYtZmVybmV0LWtleS0zMmI="
+    social_poll_minutes: int = 30
+    social_fetch_count: int = 20
 
 
 @lru_cache

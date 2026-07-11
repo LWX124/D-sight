@@ -13,6 +13,7 @@ from app.credits.router import router as credits_router
 from app.kb.router import router as kb_router
 from app.news.router import router as news_router
 from app.skills.router import router as skills_router
+from app.social.router import router as social_router
 from app.threads.router import router as threads_router
 
 
@@ -24,11 +25,13 @@ async def lifespan(app: FastAPI):
     None 分支（build_agent 用 deepagents 默认内存 checkpointer）。
     """
     from app.core.scheduler import start_scheduler, stop_scheduler
+    from app.social.crypto import assert_prod_key_configured
 
     cm = make_checkpointer(get_settings().database_url)
     async with cm as checkpointer:
         await checkpointer.setup()
         app.state.checkpointer = checkpointer
+        assert_prod_key_configured()
         start_scheduler()
         try:
             yield
@@ -55,4 +58,5 @@ def create_app() -> FastAPI:
     app.include_router(skills_router)
     app.include_router(kb_router)
     app.include_router(news_router)
+    app.include_router(social_router)
     return app

@@ -210,6 +210,7 @@ def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None,
     (ws / "skills").mkdir(exist_ok=True)
     prompt = SYSTEM_PROMPT + f"\n当前日期：{dt.date.today().isoformat()}（做时效判断时以此为准）"
     from app.agent.tools.news import make_news_query
+    from app.agent.tools.social import make_wechat_query
     from app.core.db import get_sessionmaker
 
     tools = [
@@ -219,6 +220,7 @@ def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None,
         stock_financials,
         make_run_python(ws),
         make_news_query(get_sessionmaker()),
+        make_wechat_query(get_sessionmaker()),
     ]
     if kb_ids and user_id is not None:
         from app.agent.tools.kb import make_kb_search

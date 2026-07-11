@@ -35,6 +35,18 @@ def start_scheduler() -> AsyncIOScheduler:
         _news_job, IntervalTrigger(minutes=2),
         id="news_poll", replace_existing=True,
     )
+
+    from app.core.config import get_settings
+    from app.social.job import poll_all_subscriptions
+
+    async def _social_job():
+        n = await poll_all_subscriptions()
+        _log.info("social poll done: %d new articles", n)
+
+    _scheduler.add_job(
+        _social_job, IntervalTrigger(minutes=get_settings().social_poll_minutes),
+        id="social_poll", replace_existing=True,
+    )
     _scheduler.start()
     return _scheduler
 
