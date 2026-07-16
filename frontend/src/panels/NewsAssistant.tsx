@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Zap, Search, BarChart2, ChevronLeft } from "lucide-react";
+import { Zap, Search, BarChart2, ChevronLeft, Trash2 } from "lucide-react";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
-import { fetchNews, fetchNewsThreadId, type NewsItem } from "@/lib/news";
+import { clearNewsThread, fetchNews, fetchNewsThreadId, type NewsItem } from "@/lib/news";
 import { hasStockMention, formatNewsContext } from "@/hooks/useNewsSelection";
 import { useAssistantRuntime } from "@assistant-ui/react";
 
@@ -17,6 +17,16 @@ export default function NewsAssistant({ selectedItems }: NewsAssistantProps) {
     fetchNewsThreadId().then(setThreadId).catch(console.error);
   }, []);
 
+  // 清除对话：删旧线程换新 id，key 变化重建 runtime → 历史清空。
+  const handleClear = async () => {
+    if (!threadId || !confirm("清除当前对话记录？此操作不可撤销。")) return;
+    try {
+      setThreadId(await clearNewsThread(threadId));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   if (!threadId) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -27,14 +37,17 @@ export default function NewsAssistant({ selectedItems }: NewsAssistantProps) {
 
   return (
     <RuntimeProvider key={threadId} threadId={threadId}>
-      <NewsAssistantInner selectedItems={selectedItems} />
+      <NewsAssistantInner selectedItems={selectedItems} onClear={handleClear} />
     </RuntimeProvider>
   );
 }
 
 type ViewMode = "chat" | "timeline";
 
-function NewsAssistantInner({ selectedItems }: NewsAssistantProps) {
+function NewsAssistantInner({
+  selectedItems,
+  onClear,
+}: NewsAssistantProps & { onClear: () => void }) {
   const runtime = useAssistantRuntime();
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [keyword, setKeyword] = useState("");
@@ -147,6 +160,16 @@ function NewsAssistantInner({ selectedItems }: NewsAssistantProps) {
               <Search className="size-3" />
             </button>
           </div>
+          <button
+            type="button"
+            onClick={onClear}
+            title="清除对话"
+            aria-label="清除对话"
+            data-testid="news-clear-chat"
+            className="rounded-md border border-border p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Trash2 className="size-3" />
+          </button>
         </div>
 
         {/* Row 2: 选中操作（仅在有选中时显示） */}

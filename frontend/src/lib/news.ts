@@ -34,6 +34,13 @@ export async function fetchNewsThreadId(): Promise<string> {
   return data.thread_id;
 }
 
+// 清除对话：软删当前 news 线程，再取一个新的（GET /api/news/thread 会自动重建）。
+export async function clearNewsThread(threadId: string): Promise<string> {
+  const r = await apiFetch(`/api/threads/${threadId}`, { method: "DELETE" });
+  if (!r.ok) throw new Error("failed to clear news thread");
+  return fetchNewsThreadId();
+}
+
 export async function refreshNews(channel = "news"): Promise<NewsItem[]> {
   const r = await apiFetch(`/api/news/refresh?channel=${channel}`, {
     method: "POST",
