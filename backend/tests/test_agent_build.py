@@ -1,8 +1,13 @@
+from typing import Any
+
 import httpx
 import openai
 import pytest
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
+import app.agent.build as build_mod
 from app.agent.build import (
     ALLOWED_MODELS,
     SYSTEM_PROMPT,
@@ -164,6 +169,66 @@ async def test_retry_wrapper_streams_tokens():
         c.content async for c in wrapper.astream([HumanMessage(content="hi")]) if c.content
     ]
     assert async_chunks == ["a", "b", "c"]
+
+
+class _RealStreamingModel(BaseChatModel):
+    """真 BaseChatModel 桩（区别于 _StreamStub 这种普通对象）。
+
+    只有真模型才会走 LangChain 的 callback/config 传播路径——token 双发只在这条路上暴露。
+    """
+
+    @property
+    def _llm_type(self) -> str:
+        return "real-streaming-stub"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> "_RealStreamingModel":
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content="abc"))])
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        for t in ("a", "b", "c"):
+            yield ChatGenerationChunk(message=AIMessageChunk(content=t, id="stub-msg"))
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        for t in ("a", "b", "c"):
+            yield ChatGenerationChunk(message=AIMessageChunk(content=t, id="stub-msg"))
+
+
+async def test_wrapped_model_does_not_double_stream_tokens(tmp_path, monkeypatch):
+    """回归：包装层在 LangGraph 节点里不得让每个 token 被投递两次。
+
+    根因：``_astream`` 调 ``inner.astream``（公开入口）时，LangChain 会经 contextvar
+    把节点的 RunnableConfig（含 callbacks）传给内部模型，内部自己发一轮
+    ``on_llm_new_token``；外层 ``BaseChatModel.astream`` 再发一轮 → 前端每个 token 重复
+    （"前置前置步骤步骤"）。落库的 AIMessage 由外层合并得出仍正确，故刷新页面看着正常。
+
+    FAKE_LLM 路径不经过本包装层，所以此前的假模型测试覆盖不到。
+    """
+    monkeypatch.setenv("FAKE_LLM", "1")
+    from app.core import config
+
+    config.get_settings.cache_clear()
+    import app.agent.workspace as ws_mod
+
+    monkeypatch.setattr(ws_mod, "WORKSPACES_ROOT", tmp_path)
+    monkeypatch.setattr(
+        build_mod, "_make_model", lambda: ContentRiskRetryChatModel(inner=_RealStreamingModel())
+    )
+
+    agent = build_agent("t-no-dup")
+    delivered = []
+    async for _ns, event_type, chunk in agent.astream(
+        {"messages": [{"role": "user", "content": "hi"}]},
+        config={"configurable": {"thread_id": "t-no-dup"}, "recursion_limit": 50},
+        stream_mode=["messages", "updates"],
+        subgraphs=True,
+    ):
+        if event_type == "messages" and getattr(chunk[0], "content", ""):
+            delivered.append(chunk[0].content)
+
+    assert delivered == ["a", "b", "c"], f"token 被重复投递：{delivered}"
 
 
 async def test_stream_retries_content_risk_before_first_chunk():

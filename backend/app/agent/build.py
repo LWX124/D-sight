@@ -43,6 +43,11 @@ ALLOWED_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
 _CONTENT_RISK_MARKER = "Content Exists Risk"
 _MAX_ATTEMPTS = 3  # 1 次原始 + 2 次重试
 
+# 内部模型静音用的 config：见 ContentRiskRetryChatModel._stream 的"双发"说明。
+# 不传 config 时 LangChain 会经 contextvar 把外层节点的 callbacks 传给内部模型；
+# 显式给空 callbacks 才能覆盖掉它（ensure_config 里非 None 的显式值优先）。
+_SILENCE_INNER = {"callbacks": []}
+
 SYSTEM_PROMPT = """你是 D-sight 投研助手，服务中文投资者。
 
 硬性规则：
@@ -136,8 +141,14 @@ class ContentRiskRetryChatModel(BaseChatModel):
         ``bind_tools`` 后 inner 是 ``_ChatModelBinding``，只有 ``.stream`` 会把绑定的
         ``tools`` 并入调用；``.stream`` 产出消息级 ``AIMessageChunk``，这里包成
         ``ChatGenerationChunk`` 交回 ``BaseChatModel.stream``，由其统一触发
-        ``on_llm_new_token``（即 T5 的 ``stream_mode="messages"`` 数据源）。故**不**把
-        callbacks 转发给内部 stream，否则会向同一 handler 重复发 token。
+        ``on_llm_new_token``（即 T5 的 ``stream_mode="messages"`` 数据源）。
+
+        **必须给内部流显式传 ``_SILENCE_INNER``**：``.stream`` 是公开入口，不传 config
+        时 LangChain 会经 contextvar 自动继承外层（LangGraph 节点）的 callbacks，内部
+        模型于是自己也发一轮 ``on_llm_new_token``；加上外层这轮，同一个 token 会被投递
+        两次，前端渲染成"前置前置步骤步骤"。落库的 AIMessage 由外层合并得出仍是对的，
+        所以刷新页面看着正常——只有流式过程重复。"不传 callbacks"挡不住 contextvar，
+        只有显式空 callbacks 能覆盖。
 
         **重试契约**：仅当"启动流、产出第一个 chunk 之前"抛出 Content Exists Risk
         （400）时重试（共 3 次尝试）；一旦已产出任何 chunk 便无法回撤，后续错误直接抛出。
@@ -146,7 +157,9 @@ class ContentRiskRetryChatModel(BaseChatModel):
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             started = False
             try:
-                for chunk in self.inner.stream(messages, stop=stop, **kwargs):
+                for chunk in self.inner.stream(
+                    messages, config=_SILENCE_INNER, stop=stop, **kwargs
+                ):
                     started = True
                     yield _to_gen_chunk(chunk)
             except openai.BadRequestError as exc:
@@ -166,7 +179,9 @@ class ContentRiskRetryChatModel(BaseChatModel):
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             started = False
             try:
-                async for chunk in self.inner.astream(messages, stop=stop, **kwargs):
+                async for chunk in self.inner.astream(
+                    messages, config=_SILENCE_INNER, stop=stop, **kwargs
+                ):
                     started = True
                     yield _to_gen_chunk(chunk)
             except openai.BadRequestError as exc:
