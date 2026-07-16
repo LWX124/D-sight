@@ -1,0 +1,10 @@
+# 根目录不应有 npm 工程；node_modules/ 只是 vite 等工具留下的缓存
+node_modules/
+
+# 本地工具产物
+.gstack/
+.playwright-mcp/
+.claude/worktrees/
+
+# OS / 编辑器
+.DS_Store
