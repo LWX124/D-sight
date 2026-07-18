@@ -35,8 +35,12 @@ router = APIRouter(prefix="/api/social", tags=["social"])
 async def login_qrcode(user: User = Depends(get_current_user)) -> dict:
     import base64
 
-    session_id, png = await start_qrcode()
-    return {"login_session": session_id, "qrcode": "data:image/png;base64," + base64.b64encode(png).decode()}
+    try:
+        session_id, mime, img = await start_qrcode()
+    except TransientMpError:
+        raise HTTPException(503, "微信接口暂时不可用（限流），请稍后重试")
+    return {"login_session": session_id,
+            "qrcode": f"data:{mime};base64," + base64.b64encode(img).decode()}
 
 
 @router.get("/wechat/login/status")

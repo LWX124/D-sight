@@ -53,7 +53,20 @@ async def test_login_and_refresh_rotation(client, db_session):
     assert resp.json()["access_token"]
     assert resp.cookies[REFRESH_COOKIE] != old_cookie  # 轮换
 
-    # 旧 refresh 已吊销：手动带旧 cookie 再刷新应 401
+    # 宽限期内：旧 refresh 被轮换但尚未过窗，手动带旧 cookie 再刷新仍应成功（200）。
+    # 这正是修复 /messages 401 风暴的关键——并发/多标签页刷新不再互相打架。
+    import datetime as dt
+
+    from app.core.security import decode_token
+
+    old_jti = decode_token(old_cookie, refresh=True)["jti"]
+    client.cookies.set(REFRESH_COOKIE, old_cookie, path="/api/auth")
+    assert (await client.post("/api/auth/refresh")).status_code == 200
+
+    # 宽限期过后：把旧 token 的 revoked_at 拨到过去，再刷新应 401。
+    row = await db_session.get(RefreshToken, old_jti)
+    row.revoked_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=1)
+    await db_session.commit()
     client.cookies.set(REFRESH_COOKIE, old_cookie, path="/api/auth")
     assert (await client.post("/api/auth/refresh")).status_code == 401
 

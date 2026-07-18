@@ -20,7 +20,7 @@ set -euo pipefail
 # postgres/redis 已重映射到 5434/6381 避开标准端口 5432/6379。
 POSTGRES_PORT="${POSTGRES_PORT:-5434}"
 REDIS_PORT="${REDIS_PORT:-6381}"
-BACKEND_PORT="${BACKEND_PORT:-8010}"
+BACKEND_PORT="${BACKEND_PORT:-9202}"
 FRONTEND_PORT="${FRONTEND_PORT:-5183}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -153,7 +153,10 @@ mode="$(grep -E '^(FAKE_LLM|EMBEDDING_BACKEND|NEWS_BACKEND)=' "$BACKEND/.env" 2>
 [[ -n "$mode" ]] && printf "${c_dim}模式：%s${c_off}\n" "$mode"
 
 log "启动后端  http://localhost:$BACKEND_PORT"
-( cd "$BACKEND" && PYTHONUNBUFFERED=1 exec uv run uvicorn app.main:create_app --factory --reload --port "$BACKEND_PORT" ) &
+# --reload-dir app：只监视源码目录。agent 跑 skill 时会把工具文件物化进 var/workspaces/，
+# 默认的 --reload 监视整个 backend/ 会把这些写入当成代码变更、重启服务器，正在跑的
+# /api/chat 流被拦腰砍断 → 前端卡死。限定到 app/ 后 var/ 的写入不再触发 reload。
+( cd "$BACKEND" && PYTHONUNBUFFERED=1 exec uv run uvicorn app.main:create_app --factory --reload --reload-dir app --port "$BACKEND_PORT" ) &
 PIDS+=($!)
 
 log "安装前端依赖（如缺）"

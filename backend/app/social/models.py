@@ -49,7 +49,7 @@ class WechatArticle(Base):
         ForeignKey("wechat_accounts.id", ondelete="CASCADE"), index=True
     )
     external_id: Mapped[str] = mapped_column(String(128), nullable=False)  # = aid
-    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)  # 文字消息无标题，接口把全文塞进 title，长度无上限
     digest: Mapped[str | None] = mapped_column(String(1024))
     cover_url: Mapped[str | None] = mapped_column(String(1024))
     url: Mapped[str] = mapped_column(String(1024), nullable=False)

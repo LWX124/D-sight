@@ -10,7 +10,7 @@ export default defineConfig({
     // /api 代理到后端；端口默认 8000，可用 BACKEND_PORT 覆盖（与 dev.sh 一致）。
     proxy: {
       "/api": {
-        target: `http://localhost:${process.env.BACKEND_PORT ?? 8010}`,
+        target: `http://localhost:${process.env.BACKEND_PORT ?? 9202}`,
         changeOrigin: false,
       },
     },

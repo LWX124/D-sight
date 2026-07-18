@@ -46,6 +46,27 @@ async def test_poll_inserts_for_enabled_subs(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ingest_text_post_long_title(db_session):
+    # 公众号「文字消息」无标题，接口把全文塞进 title，可远超 512 字符
+    from app.social.ingest import get_or_create_account, ingest_account
+    from app.social.wechat.client import ActiveCred
+
+    acc = await get_or_create_account(db_session, f"F{uuid.uuid4().hex[:6]}", "号")
+    aid = f"t{uuid.uuid4().hex[:6]}"
+    long_title = "创业板指已在跌破趋势的边缘" * 100
+    appmsgex = [{"aid": aid, "title": long_title, "digest": "", "cover": "",
+                 "link": f"https://mp/s/{aid}", "create_time": 1751000000}]
+    page = json.dumps({"publish_list": [{"publish_info": json.dumps({"appmsgex": appmsgex})}]})
+    http = httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"base_resp": {"ret": 0}, "publish_page": page})))
+
+    added = await ingest_account(db_session, acc, ActiveCred(id=uuid.uuid4(), token="t", cookies="c"), http)
+    assert added == 1
+    art = await db_session.scalar(select(WechatArticle).where(WechatArticle.account_id == acc.id))
+    assert art.title == long_title
+
+
+@pytest.mark.asyncio
 async def test_poll_skips_when_pool_empty(db_session, monkeypatch):
     from app.social import job
 

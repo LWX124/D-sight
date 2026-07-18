@@ -9,7 +9,7 @@ from assistant_stream.modules.langgraph import append_langgraph_event
 from assistant_stream.serialization import DataStreamResponse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from langchain_core.callbacks import UsageMetadataCallbackHandler
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.build import build_agent
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 TITLE_MAX = 30
+RUN_TIMEOUT_S = 1800  # 单轮绝对超时（30 分钟）；深度分析等重型任务需要更长处理时间
 
 
 async def _owned_thread(db: AsyncSession, user: User, thread_id: str | None) -> Thread:
@@ -120,7 +121,7 @@ async def chat(
             "callbacks": [usage_cb],
         }
         try:
-            async with asyncio.timeout(900):  # 15 分钟绝对超时
+            async with asyncio.timeout(RUN_TIMEOUT_S):
                 async for namespace, event_type, chunk in agent.astream(
                     {"messages": input_messages},
                     config=config,
@@ -130,9 +131,23 @@ async def chat(
                     append_langgraph_event(controller.state, namespace, event_type, chunk)
             ok = True  # 流正常跑完：保留 MIN_CHARGE 下限
         except TimeoutError:
-            # 超时视为已交付部分服务（"失败按实际消耗扣"仍走 MIN_CHARGE 下限）；不注入错误事件。
+            # 超时视为已交付部分服务（"失败按实际消耗扣"仍走 MIN_CHARGE 下限）。
+            # 必须向前端注入一条可见的 AI 提示：否则流里只有回显的用户消息、无任何回复，
+            # 用户看到的就是"没反应"（深度分析等重型任务最易触发）。追加到 controller.state
+            # 使其作为普通助手气泡渲染；这是本轮的即时告知，不落 checkpoint（刷新后不保留）。
             ok = True
-            logger.warning("chat run timed out after 900s (thread=%s), charging metered tokens", thread_id)
+            controller.state["messages"].append(
+                AIMessage(
+                    content=(
+                        f"⏱️ 本次分析超过 {int(RUN_TIMEOUT_S // 60)} 分钟处理上限，已中断。"
+                        "深度分析这类重型任务耗时较长，可缩小范围或拆成多轮后重试。"
+                    )
+                ).model_dump()
+            )
+            logger.warning(
+                "chat run timed out after %ss (thread=%s), charging metered tokens",
+                RUN_TIMEOUT_S, thread_id,
+            )
         finally:
             # 结束扣费 + touch updated_at 合并为一次事务（不复用请求级 session）。
             # 硬失败（未交付任何服务）按已计量 token 实扣：0 token → 不扣费、不写交易行。

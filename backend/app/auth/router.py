@@ -16,6 +16,11 @@ from app.core.security import create_access_token, create_refresh_token, decode_
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 REFRESH_COOKIE = "dsight_refresh"
+# 轮换宽限期：旧 refresh token 被轮换后仍有效的秒数。access token 只存前端内存，
+# 过期（15min）后多个并发请求 / 多标签页会各自触发一次 refresh；若旧 token 立即吊销，
+# 后到的那次会拿着刚被吊销的 token → 401 → 前端 clearToken 掉线（表现为 /messages 401 风暴）。
+# 给一个短宽限窗，让并发/重复刷新都能成功，且窗口足够小不削弱轮换的重放检测。
+REFRESH_GRACE_S = 10
 
 
 async def _issue_tokens(db: AsyncSession, user: User, response: Response) -> TokenOut:
@@ -42,7 +47,11 @@ async def _valid_refresh_row(db: AsyncSession, request: Request) -> tuple[Refres
     except jwt.InvalidTokenError:
         raise service.AuthError(401, "refresh token 无效")
     row = await db.get(RefreshToken, payload["jti"])
-    if row is None or row.revoked_at is not None or row.expires_at < dt.datetime.now(dt.UTC):
+    now = dt.datetime.now(dt.UTC)
+    # revoked_at 语义：<= now 才算真失效。轮换时置为未来（now+grace），故旧 token 在
+    # 宽限窗内仍通过校验；logout 置为 now（<= now）即刻失效。
+    revoked = row is not None and row.revoked_at is not None and row.revoked_at <= now
+    if row is None or revoked or row.expires_at < now:
         raise service.AuthError(401, "refresh token 已失效，请重新登录")
     return row, payload["sub"]
 
@@ -75,7 +84,10 @@ async def refresh(
     request: Request, response: Response, db: AsyncSession = Depends(get_db)
 ) -> TokenOut:
     row, sub = await _valid_refresh_row(db, request)
-    row.revoked_at = dt.datetime.now(dt.UTC)
+    # 首次轮换才设吊销时刻（now+grace）；宽限窗内的重复刷新不再延长，
+    # 使旧 token 生命被固定窗口封顶，避免被反复刷新无限续命。
+    if row.revoked_at is None:
+        row.revoked_at = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=REFRESH_GRACE_S)
     user = await db.get(User, uuid.UUID(sub))
     if user is None:
         raise service.AuthError(401, "用户不存在")
