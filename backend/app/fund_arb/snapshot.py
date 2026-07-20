@@ -2,6 +2,7 @@
 import datetime as dt
 import logging
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -72,13 +73,15 @@ def get_store() -> SnapshotStore:
 
 
 async def _load_context(db) -> dict:
+    today_sh = dt.datetime.now(ZoneInfo("Asia/Shanghai")).date()
     funds = (await db.execute(
         select(FundArbFund).where(FundArbFund.enabled.is_(True))
     )).scalars().all()
     codes = [f.fund_code for f in funds]
     daily_rows = (await db.execute(
         select(FundArbDaily)
-        .where(FundArbDaily.fund_code.in_(codes))
+        .where(FundArbDaily.fund_code.in_(codes),
+               FundArbDaily.date >= today_sh - dt.timedelta(days=60))
         .order_by(FundArbDaily.fund_code, FundArbDaily.date.desc())
     )).scalars().all()
     nav_anchor: dict[str, FundArbDaily] = {}
@@ -103,7 +106,7 @@ async def _load_context(db) -> dict:
         factors.setdefault(fr.fund_code, fr)
     tracking_rows = (await db.execute(
         select(FundArbTrackingDaily)
-        .where(FundArbTrackingDaily.date >= dt.date.today() - dt.timedelta(days=40))
+        .where(FundArbTrackingDaily.date >= today_sh - dt.timedelta(days=40))
     )).scalars().all()
     tracking: dict[str, dict[dt.date, float]] = {}
     for tr in tracking_rows:
@@ -111,7 +114,7 @@ async def _load_context(db) -> dict:
     return {
         "funds": funds, "nav_anchor": nav_anchor, "status": status,
         "errors": errors, "factors": factors, "tracking": tracking,
-        "navs_series": navs_series,
+        "navs_series": navs_series, "today": today_sh,
     }
 
 
@@ -142,7 +145,7 @@ def _estimate(fund: FundArbFund, ctx: dict, quotes: dict[str, Quote]) -> float |
         if span <= 0:
             return None
         daily_growth = (newest.nav / oldest.nav - 1.0) / span
-        days = (dt.date.today() - newest.date).days
+        days = (ctx["today"] - newest.date).days
         return bond_growth_valuation(newest.nav, daily_growth, max(days, 0))
     # index 公式
     q_track = quotes.get(fund.tracking_symbol)
@@ -160,7 +163,7 @@ def _estimate(fund: FundArbFund, ctx: dict, quotes: dict[str, Quote]) -> float |
             fx_t = spot.price
         else:
             fx_t = spot.price if spot is not None else _base_close(
-                ctx["tracking"].get(mid_symbol, {}), dt.date.today()
+                ctx["tracking"].get(mid_symbol, {}), ctx["today"]
             )
         if fx_base is None or fx_t is None:
             return None

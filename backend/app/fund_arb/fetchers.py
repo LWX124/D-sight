@@ -151,9 +151,11 @@ async def fetch_purchase_status() -> dict[str, dict]:
     df = await asyncio.to_thread(ak.fund_purchase_em)
     out: dict[str, dict] = {}
     for _, row in df.iterrows():
+        raw_limit = row.get("日累计限定金额", "")
+        limit_str = str(raw_limit) if raw_limit is not None and str(raw_limit) not in ("", "nan", "无限制") else None
         out[str(row["基金代码"])] = {
             "purchase_status": str(row.get("申购状态", "")),
             "redemption_status": str(row.get("赎回状态", "")),
-            "purchase_limit": str(row.get("日累计限定金额", "")) or None,
+            "purchase_limit": limit_str,
         }
     return out

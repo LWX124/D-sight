@@ -118,6 +118,8 @@ async def evening_pipeline() -> None:
                 for row in rows:
                     if row.date in dividend_dates:
                         continue
+                    if row.nav <= 0:
+                        continue
                     row.valuation_error = (row.est_nav_close / row.nav - 1.0) * 100.0
                 await db.commit()
         except Exception:
@@ -197,6 +199,8 @@ async def _run_calibration(session_factory, funds, today: dt.date) -> None:
                     if mp is None or mc is None or mp <= 0:
                         continue
                     fx_change = mc / mp
+                if prev.nav <= 0:
+                    continue
                 nav_returns.append(cur.nav / prev.nav - 1.0)
                 track_returns.append((tc / tp) * fx_change - 1.0)
             result = calibrate_position(nav_returns, track_returns)
