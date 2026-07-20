@@ -47,6 +47,31 @@ def start_scheduler() -> AsyncIOScheduler:
         _social_job, IntervalTrigger(minutes=get_settings().social_poll_minutes),
         id="social_poll", replace_existing=True,
     )
+
+    from app.fund_arb.job import evening_pipeline, morning_job, snapshot_tick
+
+    async def _fund_arb_tick():
+        n = await snapshot_tick()
+        if n:
+            _log.debug("fund_arb snapshot: %d funds", n)
+
+    _scheduler.add_job(
+        _fund_arb_tick,
+        IntervalTrigger(seconds=get_settings().fund_arb_snapshot_seconds),
+        id="fund_arb_snapshot", replace_existing=True, max_instances=1, coalesce=True,
+    )
+    _scheduler.add_job(
+        evening_pipeline, CronTrigger(hour="18,20", minute=0, timezone="Asia/Shanghai"),
+        id="fund_arb_evening", replace_existing=True,
+    )
+    _scheduler.add_job(
+        evening_pipeline, CronTrigger(hour=21, minute=30, timezone="Asia/Shanghai"),
+        id="fund_arb_evening_late", replace_existing=True,
+    )
+    _scheduler.add_job(
+        morning_job, CronTrigger(hour=9, minute=20, timezone="Asia/Shanghai"),
+        id="fund_arb_morning", replace_existing=True,
+    )
     _scheduler.start()
     return _scheduler
 

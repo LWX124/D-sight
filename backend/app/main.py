@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -33,6 +34,12 @@ async def lifespan(app: FastAPI):
         app.state.checkpointer = checkpointer
         assert_prod_key_configured()
         start_scheduler()
+        try:
+            from app.core.db import get_sessionmaker as _get_sm
+            from app.fund_arb.snapshot import load_close_snapshots
+            await load_close_snapshots(_get_sm())
+        except Exception:
+            logging.getLogger(__name__).exception("fund_arb 冷启动快照失败（不阻断启动）")
         try:
             yield
         finally:
