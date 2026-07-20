@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Library, MessageSquare, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
+import { BarChart3, Library, MessageSquare, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ export type Thread = {
   updated_at: string;
 };
 
-export type Panel = "chat" | "news" | "social" | "kb" | "skills";
+export type Panel = "chat" | "news" | "social" | "kb" | "skills" | "fund_arb";
 
 export const threadsKey = ["threads"] as const;
 
@@ -52,6 +52,7 @@ const NAV_ITEMS: { panel: Panel; icon: typeof MessageSquare; label: string; test
   { panel: "social", icon: Newspaper, label: "社媒信息", testId: "nav-social" },
   { panel: "kb", icon: Library, label: "知识库", testId: "nav-kb" },
   { panel: "skills", icon: Store, label: "技能市场", testId: "nav-skills" },
+  { panel: "fund_arb", icon: BarChart3, label: "基金套利", testId: "nav-fund-arb" },
 ];
 
 export function ThreadListSidebar({
