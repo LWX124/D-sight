@@ -34,7 +34,7 @@ async def history(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> HistoryOut:
-    since = dt.date.today() - dt.timedelta(days=days)
+    since = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date() - dt.timedelta(days=days)
     rows = (await db.execute(
         select(FundArbDaily)
         .where(FundArbDaily.fund_code == code, FundArbDaily.date >= since)

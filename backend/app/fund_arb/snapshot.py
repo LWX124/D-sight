@@ -256,7 +256,11 @@ async def load_close_snapshots(session_factory) -> int:
             nav=anchor.nav if anchor else None,
             nav_date=anchor.date if anchor else None,
             err_5d=round(sum(errs) / len(errs), 3) if errs else None,
-            low_confidence=bool(errs and sum(errs) / len(errs) > 1.0),
+            low_confidence=bool(
+                (ctx["factors"].get(fund.fund_code) is not None and
+                 ctx["factors"][fund.fund_code].r_squared < R2_THRESHOLD)
+                or (errs and sum(errs) / len(errs) > 1.0)
+            ),
             approx=fund.approx,
             purchase_status=status_row.purchase_status if status_row else None,
             redemption_status=status_row.redemption_status if status_row else None,
