@@ -204,6 +204,7 @@ dependencies = [
     { name = "assistant-stream" },
     { name = "asyncpg" },
     { name = "bcrypt" },
+    { name = "chinese-calendar" },
     { name = "cryptography" },
     { name = "deepagents" },
     { name = "fastapi" },
@@ -215,6 +216,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "pypdf" },
     { name = "python-multipart" },
+    { name = "pyyaml" },
     { name = "redis" },
     { name = "selectolax" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -241,6 +243,7 @@ requires-dist = [
     { name = "assistant-stream", specifier = ">=0.0.34" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "bcrypt", specifier = ">=5.0.0" },
+    { name = "chinese-calendar", specifier = ">=1.11.0" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "deepagents", specifier = "==0.6.12" },
     { name = "fastapi", specifier = ">=0.139.0" },
@@ -252,6 +255,7 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.13.0" },
     { name = "pypdf", specifier = ">=6.14.2" },
     { name = "python-multipart", specifier = ">=0.0.32" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "redis", specifier = ">=8.0.1" },
     { name = "selectolax", specifier = ">=0.3.21" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.51" },
@@ -510,6 +514,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/f8/e05c69323bd50091ec39f5f885385b884624b0131a6885a0c83a6217ba7a/charset_normalizer-3.4.8-cp314-cp314t-win_amd64.whl", hash = "sha256:0c926329a1df7cd56d7d8349fe354460d20aefd2e394c9e159e479d018b2b359", size = 167378, upload_time = "2026-07-06T15:27:22.042Z" },
     { url = "https://files.pythonhosted.org/packages/c2/04/cbaf1a2f5e2bbf70760e774380cbf052b10849fc35e770905df31af5cf00/charset_normalizer-3.4.8-cp314-cp314t-win_arm64.whl", hash = "sha256:2232baea80a2b01783679fed4e625ccdb19a974f44c9cf0fba21a777a4c8179c", size = 157782, upload_time = "2026-07-06T15:27:23.312Z" },
     { url = "https://files.pythonhosted.org/packages/23/52/d5bee5b6ea81882d549b566d2545b044bbcbc33fe5fbe001008a7e745a21/charset_normalizer-3.4.8-py3-none-any.whl", hash = "sha256:b7c1fb310df524e01fbe84d43b7f95aa4f808f8eaa0dafc185f64ba395e37d54", size = 64279, upload_time = "2026-07-06T15:27:57.043Z" },
+]
+
+[[package]]
+name = "chinese-calendar"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/af/d5dd356a7d03d17325a2f3100e35d26300a405bc7d57d3325dd634f04cc2/chinese_calendar-1.11.0.tar.gz", hash = "sha256:931d9187cbf7bb1dc09685dedb5013e74678bbe03a173d71d46b76afc37f2597", size = 16607, upload_time = "2025-11-04T10:22:43.64Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/34/5ba74e1c2509c522dc9bbc7ff07f2a9823c51183ef32ec2dbade1c593205/chinese_calendar-1.11.0-py2.py3-none-any.whl", hash = "sha256:6800bf53bd011a8b3e9fbb91805d16210f59648c2d86130dc43c2aa7708207ec", size = 11226, upload_time = "2025-11-04T10:22:41.935Z" },
 ]
 
 [[package]]

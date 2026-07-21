@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -14,6 +15,7 @@ from app.kb.router import router as kb_router
 from app.news.router import router as news_router
 from app.skills.router import router as skills_router
 from app.social.router import router as social_router
+from app.fund_arb.router import router as fund_arb_router
 from app.threads.router import router as threads_router
 
 
@@ -33,6 +35,12 @@ async def lifespan(app: FastAPI):
         app.state.checkpointer = checkpointer
         assert_prod_key_configured()
         start_scheduler()
+        try:
+            from app.core.db import get_sessionmaker as _get_sm
+            from app.fund_arb.snapshot import load_close_snapshots
+            await load_close_snapshots(_get_sm())
+        except Exception:
+            logging.getLogger(__name__).exception("fund_arb 冷启动快照失败（不阻断启动）")
         try:
             yield
         finally:
@@ -59,4 +67,5 @@ def create_app() -> FastAPI:
     app.include_router(kb_router)
     app.include_router(news_router)
     app.include_router(social_router)
+    app.include_router(fund_arb_router)
     return app

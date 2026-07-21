@@ -13,6 +13,7 @@ import NewsPanel from "@/panels/NewsPanel";
 import SocialPanel from "@/panels/SocialPanel";
 import KbPanel from "@/panels/KbPanel";
 import SkillsPanel from "@/panels/SkillsPanel";
+import FundArbPanel from "@/panels/FundArbPanel";
 
 async function listThreads(): Promise<ThreadT[]> {
   const r = await apiFetch("/api/threads/");
@@ -36,6 +37,7 @@ const PANEL_TITLES: Record<Panel, string> = {
   social: "社媒信息",
   kb: "知识库",
   skills: "技能市场",
+  fund_arb: "基金套利",
 };
 
 export default function ChatPage() {
@@ -139,6 +141,7 @@ export default function ChatPage() {
           {activePanel === "social" && <SocialPanel />}
           {activePanel === "kb" && <KbPanel />}
           {activePanel === "skills" && <SkillsPanel />}
+          {activePanel === "fund_arb" && <FundArbPanel />}
         </div>
       </main>
     </div>
