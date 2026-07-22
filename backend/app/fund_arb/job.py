@@ -224,6 +224,79 @@ async def _run_calibration(session_factory, funds, today: dt.date) -> None:
             _log.exception("fund_arb 校准失败：%s", fund.fund_code)
 
 
+def _parse_ref_page(html: str) -> dict[str, tuple[float, float]]:
+    """解析参考网站列表页，返回 {sina_symbol: (官方est_nav, 官方premium)}。"""
+    import re
+    out: dict[str, tuple[float, float]] = {}
+    # 实际 HTML：>SH501300</a></td><td...><font...>0.937</font></td><td...>2026-07-21</td><td...><font...>-0.69%</font>
+    for m in re.finditer(
+        r'>([SZ][HZ]\d{6})</a></td>'
+        r'<td[^>]*><font[^>]*>([\d.]+)</font></td>'
+        r'<td[^>]*>\d{4}-\d{2}-\d{2}</td>'
+        r'<td[^>]*><font[^>]*>([-\d.]+)%</font>',
+        html,
+    ):
+        sym, est, prem = m.group(1), float(m.group(2)), float(m.group(3))
+        out[sym] = (est, prem)
+    return out
+
+
+_REF_PAGES = [
+    "https://www.palmmicro.com/woody/res/qdiicn.php",
+    "https://www.palmmicro.com/woody/res/chinaindexcn.php",
+    "https://www.palmmicro.com/woody/res/chinafuturecn.php",
+    "https://www.palmmicro.com/woody/res/qdiimixcn.php",
+    "https://www.palmmicro.com/woody/res/qdiihkcn.php",
+    "https://www.palmmicro.com/woody/res/qdiieucn.php",
+]
+
+
+async def _calibrate_ref(warn_threshold: float = 0.5) -> None:
+    """抓参考网站所有列表页，与数据库最新估值对比，偏差超阈值时告警，同时落库。"""
+    import subprocess
+    ref_data: dict[str, tuple[float, float]] = {}
+    for url in _REF_PAGES:
+        try:
+            result = subprocess.run(["curl", "-s", url], capture_output=True, text=True, timeout=30)
+            ref_data.update(_parse_ref_page(result.stdout))
+        except Exception:
+            _log.exception("fund_arb 参考网站抓取失败：%s", url)
+    if not ref_data:
+        _log.warning("fund_arb 参考网站解析结果为空")
+        return
+
+    today = _now_sh().date()
+    session_factory = get_sessionmaker()
+    async with session_factory() as db:
+        funds = (await db.execute(
+            select(FundArbFund).where(FundArbFund.enabled.is_(True))
+        )).scalars().all()
+        fund_map = {f.sina_symbol.upper(): f for f in funds}
+
+        for sym_upper, (ref_est, ref_prem) in ref_data.items():
+            fund = fund_map.get(sym_upper)
+            if fund is None:
+                continue
+            row = (await db.execute(
+                select(FundArbDaily).where(
+                    FundArbDaily.fund_code == fund.fund_code,
+                    FundArbDaily.est_nav_close.is_not(None),
+                ).order_by(FundArbDaily.date.desc()).limit(1)
+            )).scalar_one_or_none()
+
+            if row and row.est_nav_close:
+                diff = (row.est_nav_close / ref_est - 1.0) * 100.0
+                if abs(diff) > warn_threshold:
+                    _log.warning(
+                        "fund_arb 估值偏差 %.2f%%：%s 我方=%.4f 参考=%.4f",
+                        diff, fund.fund_code, row.est_nav_close, ref_est,
+                    )
+
+            await _upsert_daily(db, fund.fund_code, today,
+                                ref_est_nav=ref_est, ref_premium=ref_prem)
+        await db.commit()
+
+
 async def _update_iopv() -> None:
     """从参考网站更新所有基金的 IOPV 历史数据（每日早盘前调用）。"""
     import re
@@ -289,7 +362,7 @@ async def morning_job() -> None:
         funds = (await db.execute(
             select(FundArbFund).where(
                 FundArbFund.enabled.is_(True),
-                FundArbFund.tracking_symbol.like("gb_%"),
+                FundArbFund.tracking_symbol.regexp_match(r'^(gb_|hf_)'),
             )
         )).scalars().all()
     symbols = sorted({f.tracking_symbol for f in funds})
@@ -302,8 +375,12 @@ async def morning_job() -> None:
                 await _upsert_tracking(db, sym, us_date, q.price)
             await db.commit()
     except Exception:
-        _log.exception("fund_arb 美股收盘记录失败")
+        _log.exception("fund_arb 美股/国际期货收盘记录失败")
     try:
         await _update_iopv()
     except Exception:
         _log.exception("fund_arb IOPV 批量更新失败")
+    try:
+        await _calibrate_ref()
+    except Exception:
+        _log.exception("fund_arb 参考网站校对失败")

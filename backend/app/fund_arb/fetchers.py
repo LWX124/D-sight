@@ -61,6 +61,9 @@ def _parse_sina_line(symbol: str, fields: list[str]) -> Quote | None:
         price, pct = float(fields[1]), float(fields[2])
         prev = price / (1 + pct / 100) if pct > -100 else None
         return Quote(symbol=symbol, price=price, prev_close=prev, pct=pct)
+    if symbol.startswith("hf_"):
+        # 国际期货（hf_CL原油/hf_NQ纳指等）：[0]现价 [7]昨结算
+        return Quote(symbol=symbol, price=float(fields[0]), prev_settle=float(fields[7]))
     if symbol.startswith("nf_"):
         # 国内期货：[8]最新价 [10]昨结算
         return Quote(symbol=symbol, price=float(fields[8]), prev_settle=float(fields[10]))

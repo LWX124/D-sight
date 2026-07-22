@@ -48,6 +48,8 @@ class FundArbDaily(Base):
     est_nav_close: Mapped[float | None] = mapped_column(Float)
     premium: Mapped[float | None] = mapped_column(Float)  # 收盘溢价（%）
     valuation_error: Mapped[float | None] = mapped_column(Float)  # (est/nav−1)×100，盘后回填
+    ref_est_nav: Mapped[float | None] = mapped_column(Float)       # 参考网站官方EST
+    ref_premium: Mapped[float | None] = mapped_column(Float)      # 参考网站官方溢价(%)
     purchase_status: Mapped[str | None] = mapped_column(String(16))
     redemption_status: Mapped[str | None] = mapped_column(String(16))
     purchase_limit: Mapped[str | None] = mapped_column(String(32))  # 日累计限额原文，如 "1000"
