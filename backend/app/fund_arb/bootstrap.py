@@ -81,33 +81,47 @@ async def run_bootstrap(days: int = 60) -> dict[str, int]:
         )).scalars().all()
 
     for fund in funds:
-        try:
-            recs = await fetch_nav_history(fund.fund_code, count=days)
-            async with session_factory() as db:
-                for rec in recs:
-                    nav = rec.acc_nav if fund.nav_field == "ljjz" else rec.nav
-                    if nav is not None:
-                        await _upsert_daily(db, fund.fund_code, rec.date, nav=nav)
-                        stats["navs"] += 1
-                await db.commit()
-        except Exception:
-            stats["failed"] += 1
-            _log.exception("bootstrap 净值失败：%s", fund.fund_code)
+        for attempt in range(3):
+            try:
+                recs = await fetch_nav_history(fund.fund_code, count=days)
+                async with session_factory() as db:
+                    for rec in recs:
+                        nav = rec.acc_nav if fund.nav_field == "ljjz" else rec.nav
+                        if nav is not None:
+                            await _upsert_daily(db, fund.fund_code, rec.date, nav=nav)
+                            stats["navs"] += 1
+                    await db.commit()
+                await asyncio.sleep(0.1)  # 避免并发过高
+                break
+            except Exception as e:
+                if attempt == 2:
+                    stats["failed"] += 1
+                    _log.exception("bootstrap 净值失败：%s", fund.fund_code)
+                else:
+                    _log.warning("bootstrap 净值重试 %d/3：%s - %s", attempt + 1, fund.fund_code, e)
+                    await asyncio.sleep(1)
 
     symbols = sorted({f.tracking_symbol for f in funds if f.tracking_symbol != "-"})
     cutoff = dt.date.today() - dt.timedelta(days=days + 10)
     for sym in symbols:
-        try:
-            hist = await _fetch_symbol_history(sym, days)
-            async with session_factory() as db:
-                for d, close in hist.items():
-                    if d >= cutoff:
-                        await _upsert_tracking(db, sym, d, close)
-                        stats["tracking"] += 1
-                await db.commit()
-        except Exception:
-            stats["failed"] += 1
-            _log.exception("bootstrap 标的历史失败：%s", sym)
+        for attempt in range(3):
+            try:
+                hist = await _fetch_symbol_history(sym, days)
+                async with session_factory() as db:
+                    for d, close in hist.items():
+                        if d >= cutoff:
+                            await _upsert_tracking(db, sym, d, close)
+                            stats["tracking"] += 1
+                    await db.commit()
+                await asyncio.sleep(0.1)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    stats["failed"] += 1
+                    _log.exception("bootstrap 标的历史失败：%s", sym)
+                else:
+                    _log.warning("bootstrap 标的重试 %d/3：%s - %s", attempt + 1, sym, e)
+                    await asyncio.sleep(1)
 
     try:
         fx = await _fetch_fx_mid_history(days)

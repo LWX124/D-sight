@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     social_encryption_key: str = "ZHNpZ2h0LXNvY2lhbC1kZXYtZmVybmV0LWtleS0zMmI="
     social_poll_minutes: int = 30
     social_fetch_count: int = 20
-    fund_arb_backend: str = "fake"
+    fund_arb_backend: str = "sina"
     fund_arb_snapshot_seconds: int = 20
 
 

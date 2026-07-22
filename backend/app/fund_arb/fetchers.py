@@ -79,12 +79,18 @@ def _parse_sina_line(symbol: str, fields: list[str]) -> Quote | None:
 
 class SinaQuoteFetcher(QuoteFetcher):
     async def fetch_quotes(self, symbols: list[str]) -> dict[str, Quote]:
+        import subprocess
         url = "https://hq.sinajs.cn/list=" + ",".join(symbols)
-        async with httpx.AsyncClient(timeout=15, headers=_SINA_HEADERS) as c:
-            r = await c.get(url)
-            r.raise_for_status()
+        cmd = ["curl", "-s", url, "-H", "Referer: https://finance.sina.com.cn"]
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=15)
+            text = result.stdout.decode('gbk', errors='ignore')
+        except Exception as e:
+            _log.error("curl failed: %s", e)
+            return {}
+
         out: dict[str, Quote] = {}
-        for line in r.text.splitlines():
+        for line in text.splitlines():
             if "=" not in line or "hq_str_" not in line:
                 continue
             name = line.split("hq_str_", 1)[1].split("=", 1)[0]
