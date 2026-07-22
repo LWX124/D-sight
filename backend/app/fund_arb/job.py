@@ -224,8 +224,54 @@ async def _run_calibration(session_factory, funds, today: dt.date) -> None:
             _log.exception("fund_arb 校准失败：%s", fund.fund_code)
 
 
+async def _update_iopv() -> None:
+    """从参考网站更新所有基金的 IOPV 历史数据（每日早盘前调用）。"""
+    import re
+    import subprocess
+    session_factory = get_sessionmaker()
+    async with session_factory() as db:
+        funds = (await db.execute(
+            select(FundArbFund).where(FundArbFund.enabled.is_(True))
+        )).scalars().all()
+        existing_iopv = set((await db.execute(
+            select(FundArbTrackingDaily.symbol)
+            .where(FundArbTrackingDaily.symbol.like("%_iopv"))
+            .distinct()
+        )).scalars().all())
+
+    for fund in funds:
+        iopv_sym = fund.tracking_symbol + "_iopv"
+        if iopv_sym not in existing_iopv:
+            continue
+        exchange = fund.sina_symbol[:2]
+        symbol = f"{exchange}{fund.fund_code}"
+        url = f"https://www.palmmicro.com/woody/res/{symbol}cn.php"
+        try:
+            result = subprocess.run(["curl", "-s", url], capture_output=True, text=True, timeout=30)
+            html = result.stdout
+            m = re.search(rf'id="{symbol.upper()}fundhistorytable".*?<tbody>(.*?)</tbody>',
+                          html, re.DOTALL | re.IGNORECASE)
+            if not m:
+                continue
+            rows = re.findall(r"<tr>(.*?)</tr>", m.group(1), re.DOTALL)
+            async with session_factory() as db:
+                for row in rows:
+                    cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
+                    cells_clean = [re.sub(r"<[^>]+>", "", c).strip() for c in cells]
+                    if len(cells_clean) >= 8 and re.match(r"\d{4}-\d{2}-\d{2}", cells_clean[0]):
+                        try:
+                            d = dt.date.fromisoformat(cells_clean[0])
+                            iopv = float(cells_clean[7])
+                            await _upsert_tracking(db, iopv_sym, d, iopv)
+                        except (ValueError, IndexError):
+                            continue
+                await db.commit()
+        except Exception:
+            _log.exception("fund_arb IOPV 更新失败：%s", fund.fund_code)
+
+
 async def morning_job() -> None:
-    """9:20：汇率中间价 + 美股 ETF 昨收落库。"""
+    """9:20：汇率中间价 + 美股 ETF 昨收落库 + IOPV 更新。"""
     session_factory = get_sessionmaker()
     today = _now_sh().date()
     try:
@@ -257,3 +303,7 @@ async def morning_job() -> None:
             await db.commit()
     except Exception:
         _log.exception("fund_arb 美股收盘记录失败")
+    try:
+        await _update_iopv()
+    except Exception:
+        _log.exception("fund_arb IOPV 批量更新失败")

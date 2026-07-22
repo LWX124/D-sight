@@ -12,8 +12,8 @@ import httpx
 
 _log = logging.getLogger(__name__)
 
-SPOT_FX_SINA = {"USD": "fx_susdcny", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
-MID_FX_SYMBOL = {"USD": "USDCNY_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
+SPOT_FX_SINA = {"USD": "fx_susdcnh", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
+MID_FX_SYMBOL = {"USD": "USDCNH_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
 
 _SINA_HEADERS = {"Referer": "https://finance.sina.com.cn"}
 _EM_HEADERS = {"Referer": "http://fundf10.eastmoney.com/"}
