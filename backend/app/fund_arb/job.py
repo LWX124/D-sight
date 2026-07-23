@@ -17,6 +17,7 @@ from app.fund_arb.fetchers import (
     fetch_fx_mid,
     fetch_nav_history,
     fetch_purchase_status,
+    fetch_realtime_prices,
 )
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 from app.fund_arb.snapshot import get_store, rebuild_snapshots

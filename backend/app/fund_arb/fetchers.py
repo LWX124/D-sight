@@ -12,7 +12,7 @@ import httpx
 
 _log = logging.getLogger(__name__)
 
-SPOT_FX_SINA = {"USD": "fx_susdcnh", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
+SPOT_FX_SINA = {"USD": "fx_susdcny", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
 MID_FX_SYMBOL = {"USD": "USDCNH_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
 
 _SINA_HEADERS = {"Referer": "https://finance.sina.com.cn"}
@@ -151,6 +151,76 @@ async def fetch_fx_mid() -> dict[str, float]:
         elif name == "100JPY/CNY":
             out["JPYCNY_MID"] = float(price) / 100.0
     return out
+
+
+_EM_PUSH2_HEADERS = {"Referer": "https://quote.eastmoney.com/"}
+_EM_PUSH2_CODES = frozenset({"930875", "930713", "930720", "950090", "930997"})
+_EM_KLINE_CODES = frozenset({"930914", "930917"})
+
+
+async def _fetch_price_tencent(symbol: str) -> float | None:
+    url = f"https://qt.gtimg.cn/q={symbol}"
+    async with httpx.AsyncClient(timeout=10, headers={"Referer": "https://finance.qq.com"}) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+    if '"' not in r.text:
+        return None
+    fields = r.text.split('"')[1].split("~")
+    try:
+        return float(fields[3])
+    except (IndexError, ValueError):
+        return None
+
+
+async def _fetch_price_em_push2(code: str) -> float | None:
+    url = "https://push2.eastmoney.com/api/qt/stock/get"
+    params = {"secid": f"2.{code}", "fields": "f43"}
+    async with httpx.AsyncClient(timeout=10, headers=_EM_PUSH2_HEADERS) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+    val = (data.get("data") or {}).get("f43")
+    if val is None or val == "-":
+        return None
+    return float(val) / 100.0
+
+
+async def _fetch_price_em_kline(code: str) -> float | None:
+    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    params = {"secid": f"2.{code}", "fields1": "f1", "fields2": "f51,f52,f53", "klt": 101, "fqt": 0, "lmt": 1}
+    async with httpx.AsyncClient(timeout=10, headers=_EM_PUSH2_HEADERS) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+    klines = (data.get("data") or {}).get("klines", [])
+    if not klines:
+        return None
+    try:
+        return float(klines[-1].split(",")[2])
+    except (IndexError, ValueError):
+        return None
+
+
+async def fetch_realtime_prices(fund_codes: list[str]) -> dict[str, float]:
+    """按基金代码路由抓取实时价格；不支持的代码静默跳过。"""
+    async def _one(fc: str) -> tuple[str, float | None]:
+        code = fc.removeprefix("sh")
+        try:
+            if code.startswith("000"):
+                p = await _fetch_price_tencent(fc)
+            elif code in _EM_PUSH2_CODES:
+                p = await _fetch_price_em_push2(code)
+            elif code in _EM_KLINE_CODES:
+                p = await _fetch_price_em_kline(code)
+            else:
+                return fc, None
+        except Exception:
+            _log.warning("实时价格抓取失败：%s", fc)
+            return fc, None
+        return fc, p
+
+    pairs = await asyncio.gather(*[_one(fc) for fc in fund_codes])
+    return {fc: p for fc, p in pairs if p is not None}
 
 
 async def fetch_purchase_status() -> dict[str, dict]:

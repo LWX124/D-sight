@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.fund_arb.fetchers import MID_FX_SYMBOL, SPOT_FX_SINA, Quote, QuoteFetcher
+from app.fund_arb.fetchers import MID_FX_SYMBOL, SPOT_FX_SINA, Quote, QuoteFetcher, fetch_realtime_prices
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 from app.fund_arb.valuation import (
     bond_growth_valuation,
@@ -166,9 +166,9 @@ def _estimate(fund: FundArbFund, ctx: dict, quotes: dict[str, Quote]) -> float |
         idx_today_strict = iopv_hist.get(ctx["today"])
         if idx_today_strict is not None:
             return guard_est_nav(nav_base * (idx_today_strict / idx_base), nav_base)
-        # 今日 IOPV 未更新，用实时行情价格替代
-        if q_track is not None:
-            return guard_est_nav(nav_base * (q_track.price / idx_base), nav_base)
+        # 今日 IOPV 未更新，回退到原始 index 公式（重新用 ETF 收盘价历史，量纲一致）
+        track_hist = ctx["tracking"].get(fund.tracking_symbol, {})
+        idx_base = _base_close(track_hist, nav_date)
 
     # 无 IOPV 时回退到原始 index 公式
     if q_track is None or idx_base is None:
@@ -213,6 +213,16 @@ async def rebuild_snapshots(session_factory, fetcher: QuoteFetcher,
     except Exception:
         _log.exception("fund_arb 行情批量抓取失败")
         return 0
+    # 补充抓取 Sina 未覆盖的基金实时价格
+    fc_to_sina = {f.fund_code: f.sina_symbol for f in ctx["funds"]}
+    try:
+        rt = await fetch_realtime_prices(list(fc_to_sina.keys()))
+        for fc, price in rt.items():
+            sym = fc_to_sina.get(fc, fc)
+            if sym not in quotes or not quotes[sym].price:
+                quotes[sym] = Quote(symbol=sym, price=price)
+    except Exception:
+        _log.warning("fund_arb 实时价格补充抓取失败")
     snaps, ok = [], 0
     for fund in ctx["funds"]:
         try:
