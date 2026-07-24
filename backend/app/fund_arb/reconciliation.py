@@ -83,8 +83,6 @@ async def fetch_ref_nav_all() -> dict[str, tuple[float, float]]:
     return ref_data
 
 
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from app.fund_arb.models import FundArbFund, FundArbReconciliation
 from app.fund_arb.snapshot import get_store
 
@@ -105,7 +103,7 @@ async def run_reconciliation(session_factory) -> str:
     lines: list[str] = []
     total = corrected = errors = 0
 
-    for sym_upper, (ref_est, ref_prem) in ref_data.items():
+    for sym_upper, (ref_est, _prem) in ref_data.items():
         fund = fund_map.get(sym_upper)
         if fund is None:
             continue
@@ -114,11 +112,11 @@ async def run_reconciliation(session_factory) -> str:
             async with session_factory() as db:
                 threshold = await compute_dynamic_threshold(fund.fund_code, db)
                 snap = get_store()._snaps.get(fund.fund_code)
-                local_est = snap.est_nav if snap and snap.est_nav else None
+                local_est = snap.est_nav if snap and snap.est_nav is not None else None
                 if local_est is None:
                     continue
                 result = reconcile_fund(fund.fund_code, local_est, ref_est, threshold)
-                stmt = pg_insert(FundArbReconciliation).values(
+                db.add(FundArbReconciliation(
                     fund_code=fund.fund_code,
                     run_at=run_at,
                     local_est_nav=local_est,
@@ -126,9 +124,8 @@ async def run_reconciliation(session_factory) -> str:
                     deviation_pct=result.deviation_pct,
                     threshold_used=threshold,
                     action=result.action,
-                )
-                stmt = stmt.on_conflict_do_nothing()
-                await db.execute(stmt)
+                ))
+                await db.flush()
                 await db.commit()
             if result.action == "corrected":
                 get_store().update_est_nav(fund.fund_code, ref_est)
