@@ -11,6 +11,7 @@ from app.fund_arb.job import _now_sh, get_fetcher, is_market_open
 from app.fund_arb.models import FundArbDaily
 from app.fund_arb.schemas import DashboardOut, DashboardRow, HistoryOut, HistoryPoint
 from app.fund_arb.snapshot import get_store, rebuild_snapshots
+from app.fund_arb.reconciliation import run_reconciliation as _run_reconciliation
 
 router = APIRouter(prefix="/api/fund-arb", tags=["fund_arb"])
 
@@ -53,3 +54,11 @@ async def refresh(user: User = Depends(get_current_user)) -> dict:
         raise HTTPException(status_code=403, detail="仅管理员可手动刷新")
     n = await rebuild_snapshots(get_sessionmaker(), get_fetcher())
     return {"updated": n}
+
+
+@router.post("/reconcile")
+async def reconcile(user: User = Depends(get_current_user)) -> dict:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可手动触发对账")
+    summary = await _run_reconciliation(get_sessionmaker())
+    return {"summary": summary}

@@ -39,3 +39,15 @@ def test_reconcile_fund_negative_deviation():
     r = reconcile_fund("513500", 1.2389, 1.2341, 0.003)
     assert r.action == "corrected"
     assert r.corrected_value == 1.2341
+
+
+from httpx import ASGITransport, AsyncClient
+from app.main import create_app
+import pytest
+
+@pytest.mark.anyio
+async def test_reconcile_endpoint_forbidden():
+    app = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/fund-arb/reconcile")
+    assert resp.status_code in (401, 403)
