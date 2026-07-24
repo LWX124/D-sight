@@ -82,3 +82,19 @@ class FundArbTrackingDaily(Base):
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     close: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FundArbReconciliation(Base):
+    """对账记录（每次 run_reconciliation 写入）。"""
+
+    __tablename__ = "fund_arb_reconciliation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    run_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    local_est_nav: Mapped[float] = mapped_column(Float, nullable=False)
+    ref_est_nav: Mapped[float] = mapped_column(Float, nullable=False)
+    deviation_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    threshold_used: Mapped[float] = mapped_column(Float, nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)  # "none" | "corrected"
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

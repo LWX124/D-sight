@@ -64,6 +64,12 @@ class SnapshotStore:
         out.sort(key=lambda s: (s.premium is None, -abs(s.premium or 0.0)))
         return out
 
+    def update_est_nav(self, fund_code: str, value: float) -> None:
+        snap = self._snaps.get(fund_code)
+        if snap is None:
+            return
+        self._snaps[fund_code] = FundSnapshot(**{**snap.__dict__, "est_nav": round(value, 4)})
+
 
 _store = SnapshotStore()
 
