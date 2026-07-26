@@ -1,7 +1,7 @@
 import datetime as dt
 import uuid
 
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -88,10 +88,11 @@ class FundArbReconciliation(Base):
     """对账记录（每次 run_reconciliation 写入）。"""
 
     __tablename__ = "fund_arb_reconciliation"
+    __table_args__ = (Index("ix_fund_arb_reconciliation_code_run_at", "fund_code", "run_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    fund_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
-    run_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    fund_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    run_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     local_est_nav: Mapped[float] = mapped_column(Float, nullable=False)
     ref_est_nav: Mapped[float] = mapped_column(Float, nullable=False)
     deviation_pct: Mapped[float] = mapped_column(Float, nullable=False)
