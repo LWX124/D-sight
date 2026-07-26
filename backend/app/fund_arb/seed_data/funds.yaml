@@ -343,7 +343,7 @@ funds:
   sina_symbol: sh501305
   tracking_symbol: sh930914
   tracking_type: index
-  currency: HKD
+  currency: null
   rate_type: mid
   valuation_method: index
   nav_field: dwjz
@@ -408,7 +408,7 @@ funds:
   sina_symbol: sh501306
   tracking_symbol: sh930914
   tracking_type: index
-  currency: HKD
+  currency: null
   rate_type: mid
   valuation_method: index
   nav_field: dwjz
@@ -434,7 +434,7 @@ funds:
   sina_symbol: sh501307
   tracking_symbol: sh930917
   tracking_type: index
-  currency: HKD
+  currency: null
   rate_type: mid
   valuation_method: index
   nav_field: dwjz
@@ -1119,11 +1119,11 @@ funds:
   enabled: true
 - fund_code: '160125'
   fund_name: 南方香港LOF
-  category: qdii_us_eu
+  category: qdii_asia
   sina_symbol: sz160125
   tracking_symbol: rt_hkHSI
   tracking_type: index
-  currency: USD
+  currency: HKD
   rate_type: mid
   valuation_method: index
   nav_field: dwjz
