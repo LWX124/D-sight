@@ -1,13 +1,16 @@
 # backend/app/fund_arb/reconciliation.py
+import asyncio
 import datetime as dt
 import logging
+import re
 import statistics
 import subprocess
 from dataclasses import dataclass
 
 from sqlalchemy import select
 
-from app.fund_arb.models import FundArbDaily
+from app.fund_arb.models import FundArbDaily, FundArbFund, FundArbReconciliation
+from app.fund_arb.snapshot import get_store
 
 _log = logging.getLogger(__name__)
 
@@ -58,7 +61,6 @@ _REF_PAGES = [
 
 
 def _parse_ref_page(html: str) -> dict[str, tuple[float, float]]:
-    import re
     out: dict[str, tuple[float, float]] = {}
     for m in re.finditer(
         r'>([SZ][HZ]\d{6})</a></td>'
@@ -76,15 +78,13 @@ async def fetch_ref_nav_all() -> dict[str, tuple[float, float]]:
     ref_data: dict[str, tuple[float, float]] = {}
     for url in _REF_PAGES:
         try:
-            result = subprocess.run(["curl", "-s", url], capture_output=True, text=True, timeout=30)
+            result = await asyncio.to_thread(
+                subprocess.run, ["curl", "-s", url], capture_output=True, text=True, timeout=30
+            )
             ref_data.update(_parse_ref_page(result.stdout))
         except Exception:
             _log.exception("fund_arb 参考网站抓取失败：%s", url)
     return ref_data
-
-
-from app.fund_arb.models import FundArbFund, FundArbReconciliation
-from app.fund_arb.snapshot import get_store
 
 
 async def run_reconciliation(session_factory) -> str:
@@ -106,6 +106,9 @@ async def run_reconciliation(session_factory) -> str:
     for sym_upper, (ref_est, _prem) in ref_data.items():
         fund = fund_map.get(sym_upper)
         if fund is None:
+            continue
+        if ref_est <= 0:
+            _log.warning("fund_arb 参考估值异常（≤0），跳过：%s ref_est=%s", fund.fund_code, ref_est)
             continue
         total += 1
         try:
@@ -140,11 +143,14 @@ async def run_reconciliation(session_factory) -> str:
             _log.exception("fund_arb 对账失败：%s", fund.fund_code)
             errors += 1
 
+    if total == 0:
+        _log.warning("fund_arb 对账无匹配基金（ref_data=%d 条，内存快照可能为空）", len(ref_data))
+
     header = (
         f"[reconcile] {run_at.astimezone(dt.timezone(dt.timedelta(hours=8))).strftime('%Y-%m-%d %H:%M')}"
         f"  total={total}  corrected={corrected}  errors={errors}"
     )
     col = "fund     local_est  ref_est    deviation  threshold  action"
     summary = "\n".join([header, col] + lines)
-    print(summary)
+    _log.info("fund_arb 对账完成\n%s", summary)
     return summary
