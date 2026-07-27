@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
-from app.fund_arb.fetchers import MID_FX_SYMBOL, fetch_nav_history
+from app.fund_arb.fetchers import LBMA_GOLD_PM, MID_FX_SYMBOL, fetch_lbma_gold_pm, fetch_nav_history
 from app.fund_arb.job import _upsert_daily, _upsert_tracking
 from app.fund_arb.models import FundArbFund
 
@@ -74,7 +74,7 @@ async def _fetch_fx_mid_history(days: int) -> dict[str, dict[dt.date, float]]:
 
 async def run_bootstrap(days: int = 60) -> dict[str, int]:
     session_factory = get_sessionmaker()
-    stats = {"navs": 0, "tracking": 0, "fx": 0, "failed": 0}
+    stats = {"navs": 0, "tracking": 0, "fx": 0, "lbma": 0, "failed": 0}
     async with session_factory() as db:
         funds = (await db.execute(
             select(FundArbFund).where(FundArbFund.enabled.is_(True))
@@ -134,6 +134,17 @@ async def run_bootstrap(days: int = 60) -> dict[str, int]:
     except Exception:
         stats["failed"] += 1
         _log.exception("bootstrap 中间价历史失败")
+
+    try:
+        lbma_rows = await fetch_lbma_gold_pm(limit=None)
+        async with session_factory() as db:
+            for row in lbma_rows:
+                await _upsert_tracking(db, LBMA_GOLD_PM, row.date, row.price)
+                stats["lbma"] += 1
+            await db.commit()
+    except Exception:
+        stats["failed"] += 1
+        _log.exception("bootstrap LBMA 历史失败")
 
     _log.info("fund_arb bootstrap 完成：%s", stats)
     return stats

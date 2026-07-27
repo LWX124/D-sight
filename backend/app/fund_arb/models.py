@@ -19,7 +19,8 @@ class FundArbFund(Base):
     # gold_oil / qdii_us_eu / qdii_japan / qdii_asia / domestic_lof / silver / cash_bond
     category: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     sina_symbol: Mapped[str] = mapped_column(String(24), nullable=False)   # 场内行情代码 sh501018/sz161129
-    tracking_symbol: Mapped[str] = mapped_column(String(32), nullable=False)  # 跟踪标的行情代码
+    tracking_symbol: Mapped[str] = mapped_column(String(32), nullable=False)  # 跟踪标的行情代码（分子，实时价）
+    base_symbol: Mapped[str | None] = mapped_column(String(32))  # idx_base 来源；NULL 时回退 tracking_symbol
     tracking_type: Mapped[str] = mapped_column(String(16), nullable=False)  # index / future / us_etf
     currency: Mapped[str | None] = mapped_column(String(8))  # USD/HKD/JPY，国内基金为 NULL
     rate_type: Mapped[str] = mapped_column(String(8), nullable=False, default="mid")  # mid / spot

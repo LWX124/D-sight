@@ -154,29 +154,28 @@ def _estimate(fund: FundArbFund, ctx: dict, quotes: dict[str, Quote]) -> float |
         days = (ctx["today"] - newest.date).days
         return bond_growth_valuation(newest.nav, daily_growth, max(days, 0))
     # index 公式
+    # 分子（实时价）：tracking_symbol；分母（idx_base）：base_symbol 优先，回退 tracking_symbol
+    base_sym = fund.base_symbol or fund.tracking_symbol
+    base_hist = ctx["tracking"].get(base_sym, {})
+
     # 优先使用 IOPV 符号（如 gb_xop_iopv），回退到收盘价符号
     iopv_symbol = fund.tracking_symbol + "_iopv"
     iopv_hist = ctx["tracking"].get(iopv_symbol, {})
-    use_iopv = bool(iopv_hist)
-    track_symbol = iopv_symbol if use_iopv else fund.tracking_symbol
-    track_hist = iopv_hist if use_iopv else ctx["tracking"].get(fund.tracking_symbol, {})
+    use_iopv = bool(iopv_hist) and not fund.base_symbol  # 有 base_symbol 时不走 IOPV 路径
 
     q_track = quotes.get(fund.tracking_symbol)  # 实时价格仍用原符号
-    idx_today = _base_close(track_hist, ctx["today"])
-    idx_base = _base_close(track_hist, nav_date)
 
     # 有 IOPV 历史时用滚动净值公式：est = nav_prev × (iopv_today / iopv_prev)
-    # 若今日 IOPV 尚未更新，回退到实时行情价格（盘中场景）
-    if use_iopv and idx_base is not None:
-        # 只用严格等于今日的 IOPV，不回溯（回溯会用昨日数据导致估值不反映今日涨跌）
-        idx_today_strict = iopv_hist.get(ctx["today"])
-        if idx_today_strict is not None:
-            return guard_est_nav(nav_base * (idx_today_strict / idx_base), nav_base)
-        # 今日 IOPV 未更新，回退到原始 index 公式（重新用 ETF 收盘价历史，量纲一致）
-        track_hist = ctx["tracking"].get(fund.tracking_symbol, {})
-        idx_base = _base_close(track_hist, nav_date)
+    if use_iopv:
+        idx_base = _base_close(iopv_hist, nav_date)
+        if idx_base is not None:
+            idx_today_strict = iopv_hist.get(ctx["today"])
+            if idx_today_strict is not None:
+                return guard_est_nav(nav_base * (idx_today_strict / idx_base), nav_base)
+        # 今日 IOPV 未更新，回退到原始 index 公式
+        base_hist = ctx["tracking"].get(fund.tracking_symbol, {})
 
-    # 无 IOPV 时回退到原始 index 公式
+    idx_base = _base_close(base_hist, nav_date)
     if q_track is None or idx_base is None:
         return None
     fx_t = fx_base = 1.0

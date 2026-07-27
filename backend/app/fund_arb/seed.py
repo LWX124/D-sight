@@ -11,7 +11,7 @@ from app.fund_arb.models import FundArbFund
 SEED_PATH = Path(__file__).parent / "seed_data" / "funds.yaml"
 
 FIELDS = [
-    "fund_name", "category", "sina_symbol", "tracking_symbol", "tracking_type",
+    "fund_name", "category", "sina_symbol", "tracking_symbol", "base_symbol", "tracking_type",
     "currency", "rate_type", "valuation_method", "nav_field",
     "pos_ratio_default", "approx", "enabled",
 ]

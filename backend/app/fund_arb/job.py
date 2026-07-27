@@ -15,9 +15,10 @@ from app.fund_arb.fetchers import (
     QuoteFetcher,
     SinaQuoteFetcher,
     fetch_fx_mid,
+    fetch_lbma_gold_pm,
     fetch_nav_history,
     fetch_purchase_status,
-    fetch_realtime_prices,
+    LBMA_GOLD_PM,
 )
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 from app.fund_arb.snapshot import get_store, rebuild_snapshots
@@ -128,8 +129,13 @@ async def evening_pipeline() -> None:
 
     today = _now_sh().date()
     symbols = sorted({
-        f.tracking_symbol for f in funds
-        if f.tracking_symbol != "-" and not f.tracking_symbol.startswith("gb_")
+        sym
+        for f in funds
+        for sym in ([f.tracking_symbol] + ([f.base_symbol] if f.base_symbol else []))
+        if sym != "-"
+        and not sym.startswith("gb_")
+        and not sym.startswith("hf_")
+        and not sym.startswith("LBMA_")
     })
     try:
         quotes = await get_fetcher().fetch_quotes(symbols)
@@ -283,6 +289,14 @@ async def morning_job() -> None:
             await db.commit()
     except Exception:
         _log.exception("fund_arb 中间价抓取失败")
+    try:
+        lbma_rows = await fetch_lbma_gold_pm()
+        async with session_factory() as db:
+            for row in lbma_rows:
+                await _upsert_tracking(db, LBMA_GOLD_PM, row.date, row.price)
+            await db.commit()
+    except Exception:
+        _log.exception("fund_arb LBMA 黄金定盘价抓取失败")
     us_date = today - dt.timedelta(days=1)
     while us_date.weekday() >= 5:
         us_date -= dt.timedelta(days=1)

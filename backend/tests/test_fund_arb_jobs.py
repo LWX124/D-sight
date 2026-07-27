@@ -6,8 +6,8 @@ from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.fund_arb import job as fund_job
-from app.fund_arb.fetchers import FakeQuoteFetcher, NavRecord, Quote
-from app.fund_arb.job import evening_pipeline, is_market_open, snapshot_tick
+from app.fund_arb.fetchers import DatedPrice, FakeQuoteFetcher, NavRecord, Quote
+from app.fund_arb.job import evening_pipeline, is_market_open, morning_job, snapshot_tick
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 
 SH = ZoneInfo("Asia/Shanghai")
@@ -105,3 +105,48 @@ async def test_evening_pipeline(db_session, monkeypatch):
         ))).scalars().first()
         assert factor is not None
         assert 0.8 < factor.position_beta < 1.1
+
+
+@pytest.mark.asyncio
+async def test_evening_pipeline_does_not_persist_hf_current_price(db_session, monkeypatch):
+    async with get_sessionmaker()() as db:
+        db.add(FundArbFund(
+            fund_code="160719", fund_name="嘉实黄金", category="gold_oil",
+            sina_symbol="sz160719", tracking_symbol="hf_GC", base_symbol="LBMA_GOLD_PM",
+            tracking_type="future", currency="USD", rate_type="mid",
+            valuation_method="index", nav_field="dwjz", pos_ratio_default=0.95,
+            approx=True, enabled=True,
+        ))
+        await db.commit()
+
+    requested = []
+
+    class RecordingFetcher(FakeQuoteFetcher):
+        async def fetch_quotes(self, symbols):
+            requested.extend(symbols)
+            return await super().fetch_quotes(symbols)
+
+    async def fake_nav_history(fund_code, count=15):
+        return []
+
+    async def fake_purchase_status():
+        return {}
+
+    monkeypatch.setattr(fund_job, "fetch_nav_history", fake_nav_history)
+    monkeypatch.setattr(fund_job, "fetch_purchase_status", fake_purchase_status)
+    monkeypatch.setattr(fund_job, "get_fetcher", lambda: RecordingFetcher({
+        "hf_GC": Quote(symbol="hf_GC", price=4100.0, prev_settle=4080.0),
+    }))
+    monkeypatch.setattr(fund_job, "_now_sh", lambda: dt.datetime(2026, 7, 20, 21, 30, tzinfo=SH))
+
+    await evening_pipeline()
+
+    assert "hf_GC" not in requested
+    async with get_sessionmaker()() as db:
+        count = (await db.execute(
+            select(FundArbTrackingDaily).where(
+                FundArbTrackingDaily.symbol == "hf_GC",
+                FundArbTrackingDaily.date == dt.date(2026, 7, 20),
+            )
+        )).scalars().all()
+    assert count == []

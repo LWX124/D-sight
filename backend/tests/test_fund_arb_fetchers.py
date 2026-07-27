@@ -5,10 +5,12 @@ import respx
 from httpx import Response
 
 from app.fund_arb.fetchers import (
+    DatedPrice,
     FakeQuoteFetcher,
     Quote,
     SinaQuoteFetcher,
     fetch_fx_mid,
+    fetch_lbma_gold_pm,
     fetch_nav_history,
 )
 
@@ -45,13 +47,16 @@ async def test_fake_fetcher_returns_subset():
     assert set(got) == {"sz161129"}
 
 
+def _raw_returning(text: str):
+    async def _impl(symbols):
+        return text
+    return _impl
+
+
 @pytest.mark.asyncio
-@respx.mock
 async def test_sina_parse_all_prefixes():
-    respx.get(url__startswith="https://hq.sinajs.cn/").mock(
-        return_value=Response(200, text=SINA_BODY)
-    )
     f = SinaQuoteFetcher()
+    f._fetch_raw = _raw_returning(SINA_BODY)
     got = await f.fetch_quotes([
         "sz161129", "sh000300", "gb_uso", "nf_AG0",
         "fx_susdcny", "int_nikkei", "rt_hkHSI",
@@ -81,17 +86,15 @@ async def test_sina_parse_all_prefixes():
 
 
 @pytest.mark.asyncio
-@respx.mock
 async def test_sina_malformed_line_isolated():
     body = (
         'var hq_str_sz161129="";\n'
         'var hq_str_sh000300="沪深300,4575.6712,4529.0953,4598.3208,4628.7985,4521.1808,'
         '0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-20,15:00:03,00,";\n'
     )
-    respx.get(url__startswith="https://hq.sinajs.cn/").mock(
-        return_value=Response(200, text=body)
-    )
-    got = await SinaQuoteFetcher().fetch_quotes(["sz161129", "sh000300"])
+    f = SinaQuoteFetcher()
+    f._fetch_raw = _raw_returning(body)
+    got = await f.fetch_quotes(["sz161129", "sh000300"])
     assert "sz161129" not in got
     assert got["sh000300"].price == pytest.approx(4598.3208)
 
@@ -129,3 +132,22 @@ async def test_fetch_fx_mid():
     mids = await fetch_fx_mid()
     assert mids["USDCNY_MID"] == pytest.approx(7.165)
     assert mids["JPYCNY_MID"] == pytest.approx(0.0482)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_lbma_gold_pm_preserves_fixing_date():
+    respx.get("https://prices.lbma.org.uk/json/gold_pm.json").mock(
+        return_value=Response(200, json=[
+            {"d": "2026-07-23", "v": [4044.9, 3035.29, 3557.49]},
+            {"d": "2026-07-24", "v": [4067.3, 3051.29, 3574.34]},
+        ])
+    )
+
+    assert await fetch_lbma_gold_pm() == [
+        DatedPrice(date=dt.date(2026, 7, 24), price=4067.3)
+    ]
+    assert await fetch_lbma_gold_pm(limit=None) == [
+        DatedPrice(date=dt.date(2026, 7, 23), price=4044.9),
+        DatedPrice(date=dt.date(2026, 7, 24), price=4067.3),
+    ]

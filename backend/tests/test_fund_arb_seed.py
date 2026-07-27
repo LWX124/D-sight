@@ -31,6 +31,6 @@ async def test_seed_data_valid(db_session):
         assert 0 < r.pos_ratio_default <= 1.2
         assert r.valuation_method in {"index", "silver_future", "bond_growth"}
         if r.valuation_method == "index":
-            assert r.tracking_symbol.startswith(("sh", "sz", "gb_", "int_", "rt_", "nf_")), (
+            assert r.tracking_symbol.startswith(("sh", "sz", "gb_", "int_", "rt_", "nf_", "hf_")), (
                 f"{r.fund_code} tracking_symbol 未校对: {r.tracking_symbol}"
             )

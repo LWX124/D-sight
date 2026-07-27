@@ -36,6 +36,13 @@ class NavRecord:
     dividend: str | None
 
 
+@dataclass
+class DatedPrice:
+    """带源日期的价格记录，用于 LBMA 等以发布日为准的定盘价序列。"""
+    date: dt.date
+    price: float
+
+
 class QuoteFetcher(ABC):
     @abstractmethod
     async def fetch_quotes(self, symbols: list[str]) -> dict[str, Quote]: ...
@@ -81,15 +88,21 @@ def _parse_sina_line(symbol: str, fields: list[str]) -> Quote | None:
 
 
 class SinaQuoteFetcher(QuoteFetcher):
-    async def fetch_quotes(self, symbols: list[str]) -> dict[str, Quote]:
+    async def _fetch_raw(self, symbols: list[str]) -> str:
+        """拉取新浪行情原始文本。抽成方法便于测试注入。"""
         import subprocess
         url = "https://hq.sinajs.cn/list=" + ",".join(symbols)
         cmd = ["curl", "-s", url, "-H", "Referer: https://finance.sina.com.cn"]
         try:
             result = subprocess.run(cmd, capture_output=True, timeout=15)
-            text = result.stdout.decode('gbk', errors='ignore')
+            return result.stdout.decode('gbk', errors='ignore')
         except Exception as e:
             _log.error("curl failed: %s", e)
+            return ""
+
+    async def fetch_quotes(self, symbols: list[str]) -> dict[str, Quote]:
+        text = await self._fetch_raw(symbols)
+        if not text:
             return {}
 
         out: dict[str, Quote] = {}
@@ -129,6 +142,35 @@ async def fetch_nav_history(fund_code: str, count: int = 60) -> list[NavRecord]:
             ))
         except (ValueError, KeyError):
             continue
+    return out
+
+
+LBMA_GOLD_PM = "LBMA_GOLD_PM"
+
+
+async def fetch_lbma_gold_pm(limit: int | None = 1) -> list[DatedPrice]:
+    """LBMA 黄金 PM 定盘价（USD/oz），保留每条记录的实际定盘日期。
+
+    limit=None 返回全量历史，limit=N 返回最近 N 个交易日（默认最新一条）。
+    日期取响应中的 ``d`` 字段（伦敦定盘日），不能按上海当天落库——上海早盘
+    抓到的最新 PM 定盘价通常属于前一个伦敦交易日。
+    """
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get("https://prices.lbma.org.uk/json/gold_pm.json",
+                        headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+    data = r.json()
+    out: list[DatedPrice] = []
+    for rec in data:
+        vs = rec.get("v")
+        if not vs or not vs[0]:
+            continue
+        try:
+            out.append(DatedPrice(date=dt.date.fromisoformat(rec["d"]), price=float(vs[0])))
+        except (KeyError, ValueError, TypeError):
+            continue
+    if limit is not None:
+        out = out[-limit:]
     return out
 
 

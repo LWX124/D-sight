@@ -42,8 +42,9 @@ funds:
   fund_name: 国泰大宗商品
   category: gold_oil
   sina_symbol: sz160216
-  tracking_symbol: gb_gld
-  tracking_type: index
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
@@ -55,8 +56,9 @@ funds:
   fund_name: 银华抗通胀
   category: gold_oil
   sina_symbol: sz161815
-  tracking_symbol: gb_gld
-  tracking_type: index
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
@@ -68,8 +70,9 @@ funds:
   fund_name: 嘉实黄金
   category: gold_oil
   sina_symbol: sz160719
-  tracking_symbol: gb_gld
-  tracking_type: us_etf
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
@@ -81,8 +84,9 @@ funds:
   fund_name: 易方达黄金
   category: gold_oil
   sina_symbol: sz161116
-  tracking_symbol: gb_gld
-  tracking_type: index
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
@@ -94,8 +98,9 @@ funds:
   fund_name: 汇添富贵金属
   category: gold_oil
   sina_symbol: sz164701
-  tracking_symbol: gb_gld
-  tracking_type: index
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
@@ -107,8 +112,9 @@ funds:
   fund_name: 中信保诚
   category: gold_oil
   sina_symbol: sz165513
-  tracking_symbol: gb_gld
-  tracking_type: index
+  tracking_symbol: hf_GC
+  base_symbol: LBMA_GOLD_PM
+  tracking_type: future
   currency: USD
   rate_type: mid
   valuation_method: index
