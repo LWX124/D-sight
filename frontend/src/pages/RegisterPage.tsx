@@ -60,10 +60,36 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4">
+      {/* 背景网格 + 顶部光晕 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, oklch(1 0 0 / 3%) 1px, transparent 1px), linear-gradient(to bottom, oklch(1 0 0 / 3%) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[40rem] -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]"
+      />
+
+      <Card className="relative w-full max-w-sm border-border/60 bg-card/60 backdrop-blur animate-fade-up">
         <CardHeader>
-          <CardTitle>注册 D-sight</CardTitle>
+          <div className="mb-2 flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-md bg-gradient-to-br from-primary via-primary to-primary/70 text-primary-foreground animate-glow-pulse">
+              <span className="nums text-sm font-semibold">D</span>
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="text-sm font-semibold tracking-tight">D-sight</span>
+              <span className="nums mt-0.5 text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+                Terminal
+              </span>
+            </div>
+          </div>
+          <CardTitle className="text-base">注册</CardTitle>
           <CardDescription>使用邮箱验证码创建账号</CardDescription>
         </CardHeader>
         <CardContent>
@@ -95,7 +121,7 @@ export default function RegisterPage() {
                   variant="outline"
                   onClick={onRequestCode}
                   disabled={countdown > 0 || sending}
-                  className="shrink-0"
+                  className="shrink-0 cursor-pointer"
                 >
                   {countdown > 0 ? `${countdown}s` : sending ? "发送中…" : "获取验证码"}
                 </Button>
@@ -113,13 +139,13 @@ export default function RegisterPage() {
                 required
               />
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" disabled={loading}>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" disabled={loading} className="cursor-pointer">
               {loading ? "注册中…" : "注册"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              已有账号？{" "}
-              <Link to="/login" className="text-foreground underline">
+              已有账号?{" "}
+              <Link to="/login" className="text-primary hover:underline">
                 登录
               </Link>
             </p>

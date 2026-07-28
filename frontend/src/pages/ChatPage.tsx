@@ -89,21 +89,24 @@ export default function ChatPage() {
         onPanelChange={setActivePanel}
       />
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 items-center justify-between border-b border-border px-5">
-          <span className="text-sm font-medium text-foreground">
-            {PANEL_TITLES[activePanel]}
-          </span>
+        <header className="flex h-12 items-center justify-between border-b border-border bg-card/40 px-5 backdrop-blur">
+          <div className="flex items-center gap-2.5">
+            <span className="size-1 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]" />
+            <span className="nums text-[11px] font-medium uppercase tracking-[0.22em] text-foreground">
+              {PANEL_TITLES[activePanel]}
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             {activePanel === "chat" && <KbMountSelector />}
             {credits && (
               <span
                 data-testid="credit-badge"
-                className="text-xs text-muted-foreground tabular-nums"
+                className="nums rounded-md border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] text-primary"
               >
                 {credits.balance}/{credits.monthly_quota}
               </span>
             )}
-            <Button variant="ghost" size="sm" onClick={onLogout}>
+            <Button variant="ghost" size="sm" onClick={onLogout} className="cursor-pointer">
               退出
             </Button>
           </div>
@@ -116,7 +119,7 @@ export default function ChatPage() {
             积分不足，请联系管理员或等待月初重置
           </div>
         )}
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 animate-fade-up" key={activePanel}>
           {activePanel === "chat" && (
             <>
               {activeThreadId ? (

@@ -2,12 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -16,11 +19,13 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -39,6 +44,11 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+
+    /* 金融涨跌(A股惯例:红涨绿跌) */
+    --color-up: var(--up);
+    --color-down: var(--down);
+
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -48,83 +58,200 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Terminal Dark —— OLED 深黑底 + cyan accent + 金融涨跌霓虹
+ * 默认即为深色,不再提供浅色分支(如需双主题再补)
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --background: oklch(0.145 0.012 250);      /* #0B0F17 OLED 深黑,带一丝蓝 */
+    --foreground: oklch(0.93 0.005 250);
+    --card: oklch(0.175 0.014 250);            /* 比背景亮一档 */
+    --card-foreground: oklch(0.93 0.005 250);
+    --popover: oklch(0.18 0.014 250);
+    --popover-foreground: oklch(0.93 0.005 250);
+
+    --primary: oklch(0.82 0.13 195);           /* cyan-300 ~ #67E8F9 */
+    --primary-foreground: oklch(0.16 0.02 250);
+    --secondary: oklch(0.22 0.015 250);
+    --secondary-foreground: oklch(0.93 0.005 250);
+    --muted: oklch(0.22 0.015 250);
+    --muted-foreground: oklch(0.62 0.01 250);
+    --accent: oklch(0.24 0.02 250);
+    --accent-foreground: oklch(0.95 0.005 250);
+    --destructive: oklch(0.62 0.22 25);
+
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.82 0.13 195 / 60%);
+
+    /* A股惯例:红涨绿跌,霓虹化 */
+    --up: oklch(0.68 0.22 25);                 /* 亮红 #F43F5E 方向 */
+    --down: oklch(0.78 0.18 165);              /* 青绿 #10B981 方向 */
+
+    --chart-1: oklch(0.82 0.13 195);
+    --chart-2: oklch(0.78 0.18 165);
+    --chart-3: oklch(0.68 0.22 25);
+    --chart-4: oklch(0.75 0.15 280);
+    --chart-5: oklch(0.72 0.16 60);
+
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+
+    --sidebar: oklch(0.165 0.013 250);
+    --sidebar-foreground: oklch(0.93 0.005 250);
+    --sidebar-primary: oklch(0.82 0.13 195);
+    --sidebar-primary-foreground: oklch(0.16 0.02 250);
+    --sidebar-accent: oklch(0.24 0.02 250);
+    --sidebar-accent-foreground: oklch(0.95 0.005 250);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.82 0.13 195 / 60%);
 }
 
+/* 保留 .dark 别名以兼容已有 dark: 前缀 */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: oklch(0.145 0.012 250);
+    --foreground: oklch(0.93 0.005 250);
+    --card: oklch(0.175 0.014 250);
+    --card-foreground: oklch(0.93 0.005 250);
+    --popover: oklch(0.18 0.014 250);
+    --popover-foreground: oklch(0.93 0.005 250);
+    --primary: oklch(0.82 0.13 195);
+    --primary-foreground: oklch(0.16 0.02 250);
+    --secondary: oklch(0.22 0.015 250);
+    --secondary-foreground: oklch(0.93 0.005 250);
+    --muted: oklch(0.22 0.015 250);
+    --muted-foreground: oklch(0.62 0.01 250);
+    --accent: oklch(0.24 0.02 250);
+    --accent-foreground: oklch(0.95 0.005 250);
+    --destructive: oklch(0.62 0.22 25);
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.82 0.13 195 / 60%);
+    --up: oklch(0.68 0.22 25);
+    --down: oklch(0.78 0.18 165);
+    --chart-1: oklch(0.82 0.13 195);
+    --chart-2: oklch(0.78 0.18 165);
+    --chart-3: oklch(0.68 0.22 25);
+    --chart-4: oklch(0.75 0.15 280);
+    --chart-5: oklch(0.72 0.16 60);
+    --sidebar: oklch(0.165 0.013 250);
+    --sidebar-foreground: oklch(0.93 0.005 250);
+    --sidebar-primary: oklch(0.82 0.13 195);
+    --sidebar-primary-foreground: oklch(0.16 0.02 250);
+    --sidebar-accent: oklch(0.24 0.02 250);
+    --sidebar-accent-foreground: oklch(0.95 0.005 250);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.82 0.13 195 / 60%);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
-    @apply bg-background text-foreground;
-    }
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(circle at 1px 1px, oklch(1 0 0 / 3%) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
   html {
     @apply font-sans;
-    }
+    color-scheme: dark;
+  }
+
+  /* 深色细滚动条 */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 10%);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(1 0 0 / 18%);
+  }
+}
+
+/* ============ 关键帧:金融终端动效 ============ */
+
+/* 状态灯呼吸(交易中) */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+/* 价格上涨闪红 */
+@keyframes flash-up {
+  0%   { background-color: oklch(0.68 0.22 25 / 25%); }
+  100% { background-color: transparent; }
+}
+
+/* 价格下跌闪绿 */
+@keyframes flash-down {
+  0%   { background-color: oklch(0.78 0.18 165 / 25%); }
+  100% { background-color: transparent; }
+}
+
+/* 列表/卡片进入 */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* accent 微光呼吸(用于 logo / badge) */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px oklch(0.82 0.13 195 / 30%); }
+  50%      { box-shadow: 0 0 20px oklch(0.82 0.13 195 / 50%); }
+}
+
+/* 骨架 shimmer */
+@keyframes shimmer-slide {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+@utility animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@utility animate-flash-up {
+  animation: flash-up 600ms ease-out;
+}
+@utility animate-flash-down {
+  animation: flash-down 600ms ease-out;
+}
+@utility animate-fade-up {
+  animation: fade-up 240ms ease-out;
+}
+@utility animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+@utility animate-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    oklch(1 0 0 / 4%) 0%,
+    oklch(1 0 0 / 12%) 50%,
+    oklch(1 0 0 / 4%) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-slide 1.4s linear infinite;
+}
+
+/* 数字列统一等宽 */
+@utility nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 尊重 reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

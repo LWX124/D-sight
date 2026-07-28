@@ -104,55 +104,82 @@ export function ThreadListSidebar({
   }
 
   return (
-    <aside className="flex h-svh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
+    <aside className="flex h-svh w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Logo / Brand */}
-      <div className="flex items-center gap-2 px-4 py-4">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <span className="text-xs font-semibold">D</span>
+      <div className="flex items-center gap-2.5 px-4 py-4">
+        <div
+          className={cn(
+            "flex size-7 items-center justify-center rounded-md",
+            "bg-gradient-to-br from-primary via-primary to-primary/70",
+            "text-primary-foreground animate-glow-pulse",
+          )}
+        >
+          <span className="nums text-[13px] font-semibold">D</span>
         </div>
-        <span className="text-sm font-semibold tracking-tight text-foreground">D-sight</span>
+        <div className="flex flex-col leading-none">
+          <span className="text-[13px] font-semibold tracking-tight text-foreground">
+            D-sight
+          </span>
+          <span className="nums mt-0.5 text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70">
+            Terminal
+          </span>
+        </div>
       </div>
 
       {/* Navigation */}
       <nav className="space-y-0.5 px-2">
-        {NAV_ITEMS.map(({ panel, icon: Icon, label, testId }) => (
-          <button
-            key={panel}
-            type="button"
-            data-testid={testId}
-            onClick={() => onPanelChange(panel)}
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
-              activePanel === panel
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-            )}
-          >
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
+        {NAV_ITEMS.map(({ panel, icon: Icon, label, testId }) => {
+          const active = activePanel === panel;
+          return (
+            <button
+              key={panel}
+              type="button"
+              data-testid={testId}
+              onClick={() => onPanelChange(panel)}
+              className={cn(
+                "relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium",
+                "transition-all duration-150 cursor-pointer",
+                active
+                  ? "bg-sidebar-accent text-foreground shadow-[inset_2px_0_0_0_var(--color-primary)]"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              )}
+            >
+              <Icon
+                className={cn(
+                  "size-4 transition-colors duration-150",
+                  active && "text-primary",
+                )}
+              />
+              <span className="flex-1 text-left">{label}</span>
+              {active && (
+                <span className="size-1 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]" />
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Divider + Thread list */}
       <div className="mx-3 my-3 border-t border-sidebar-border" />
 
       <div className="flex items-center justify-between px-3 pb-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
+        <span className="nums text-[10px] font-medium uppercase tracking-[0.18em] text-sidebar-foreground/50">
           会话
         </span>
         <button
           type="button"
           onClick={() => create.mutate()}
           disabled={create.isPending}
-          className="rounded-md p-0.5 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="cursor-pointer rounded-md p-1 text-sidebar-foreground/50 transition-colors duration-150 hover:bg-sidebar-accent hover:text-primary"
         >
           <Plus className="size-3.5" />
         </button>
       </div>
 
       <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-        {isLoading && <p className="px-2 py-1 text-xs text-muted-foreground">加载中…</p>}
+        {isLoading && (
+          <p className="px-2 py-1 text-xs text-muted-foreground">加载中…</p>
+        )}
         {!isLoading && threads.length === 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground">暂无会话</p>
         )}
@@ -162,16 +189,17 @@ export function ThreadListSidebar({
             <div
               key={t.id}
               className={cn(
-                "group flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px]",
+                "group flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px]",
+                "transition-colors duration-150",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50",
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_2px_0_0_0_var(--color-primary)]"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
               )}
             >
               {editingId === t.id ? (
                 <input
                   autoFocus
-                  className="min-w-0 flex-1 rounded border border-input bg-background px-1 py-0.5 text-xs outline-none"
+                  className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={() => commitRename(t.id)}
@@ -183,7 +211,7 @@ export function ThreadListSidebar({
               ) : (
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate text-left"
+                  className="min-w-0 flex-1 cursor-pointer truncate text-left"
                   title={t.title}
                   onClick={() => {
                     onSelect(t.id);
@@ -200,7 +228,7 @@ export function ThreadListSidebar({
               <button
                 type="button"
                 aria-label="重命名"
-                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground group-hover:block"
+                className="hidden shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground group-hover:block"
                 onClick={() => {
                   setEditingId(t.id);
                   setDraft(t.title);
@@ -211,7 +239,7 @@ export function ThreadListSidebar({
               <button
                 type="button"
                 aria-label="删除"
-                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:block"
+                className="hidden shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive group-hover:block"
                 onClick={() => {
                   if (confirm(`删除会话「${t.title}」？`)) remove.mutate(t.id);
                 }}
