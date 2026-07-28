@@ -17,6 +17,7 @@ vi.mock("@/lib/social", () => ({
 describe("SocialPanel 渲染", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.clearAllMocks();
   });
 
   it("顶部有信源 Tab 栏，微信公众号为当前激活 Tab", async () => {
@@ -74,6 +75,34 @@ describe("SocialPanel 渲染", () => {
       expect(screen.getByText("我的号")).toBeTruthy();
     });
     expect(screen.queryByText("扫码登录公众号")).toBeNull();
+    // 有有效凭证时不应自动拉起二维码
+    expect(social.startLoginQrcode).not.toHaveBeenCalled();
+  });
+
+  it("仅有过期凭证时合并为单条提示并自动拉起二维码", async () => {
+    const social = await import("@/lib/social");
+    vi.mocked(social.listCredentials).mockResolvedValueOnce([
+      { id: "c1", nickname: "旧号A", avatar: null, status: "expired", expires_at: "2026-07-01" },
+      { id: "c2", nickname: "旧号B", avatar: null, status: "expired", expires_at: "2026-07-02" },
+    ]);
+    vi.mocked(social.startLoginQrcode).mockResolvedValue({
+      login_session: "S1",
+      qrcode: "data:image/jpg;base64,xx",
+    });
+    vi.mocked(social.pollLoginStatus).mockResolvedValue({ status: "scanned", nickname: null });
+
+    const { default: SocialPanel } = await import("./SocialPanel");
+    render(<SocialPanel />);
+
+    // 过期合并为单条提示，不再逐条列出"已过期，请重登"
+    await waitFor(() => {
+      expect(screen.getByText("登录已过期，请重新扫码登录")).toBeTruthy();
+    });
+    expect(screen.queryByText("已过期，请重登")).toBeNull();
+    // 自动拉起二维码恰好一次
+    await waitFor(() => {
+      expect(social.startLoginQrcode).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("接口失败时展示错误信息而不是静默失败", async () => {

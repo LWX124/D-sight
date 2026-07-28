@@ -62,8 +62,13 @@ function WechatTab() {
   const [loginMsg, setLoginMsg] = useState("");
   const [err, setErr] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 自动拉起二维码只触发一次，避免扫码失败后循环重拉
+  const autoTriggeredRef = useRef(false);
 
-  const hasActiveCred = creds.some((c) => c.status === "active");
+  const activeCreds = creds.filter((c) => c.status === "active");
+  const expiredCreds = creds.filter((c) => c.status !== "active");
+  const hasActiveCred = activeCreds.length > 0;
+  const hasExpiredCred = expiredCreds.length > 0;
   const activeSub = subs.find((s) => s.account_id === activeAcc) ?? null;
 
   async function reloadCredsAndSubs() {
@@ -73,6 +78,15 @@ function WechatTab() {
   useEffect(() => {
     reloadCredsAndSubs().catch((e) => setErr(String(e)));
   }, []);
+
+  // 凭证加载后：若无有效凭证（含仅有过期凭证），自动拉起一次扫码二维码
+  useEffect(() => {
+    if (autoTriggeredRef.current) return;
+    if (hasActiveCred || qr || loginMsg) return;
+    if (!hasExpiredCred && creds.length === 0) return; // 凭证尚未加载完，不触发
+    autoTriggeredRef.current = true;
+    onLogin();
+  }, [hasActiveCred, hasExpiredCred, creds.length, qr, loginMsg]);
 
   useEffect(() => {
     return () => {
@@ -258,17 +272,18 @@ function WechatTab() {
         {/* 登录区：有有效凭证时收起为状态行 */}
         <div className="border-t p-3">
           <div className="mb-1.5 text-xs font-medium text-muted-foreground">公众号登录</div>
-          {creds.map((c) => (
+          {activeCreds.map((c) => (
             <div key={c.id} className="flex items-center gap-1.5 text-xs">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${c.status === "active" ? "bg-green-500" : "bg-red-500"}`}
-              />
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
               <span className="truncate">{c.nickname}</span>
-              <span className="shrink-0 text-muted-foreground">
-                {c.status === "active" ? "有效" : "已过期，请重登"}
-              </span>
+              <span className="shrink-0 text-muted-foreground">有效</span>
             </div>
           ))}
+          {hasExpiredCred && (
+            <p className="mb-2 text-xs text-red-500">
+              登录已过期，请重新扫码登录
+            </p>
+          )}
           {!hasActiveCred && (
             <>
               <p className="mb-2 mt-1 text-xs leading-5 text-muted-foreground">
