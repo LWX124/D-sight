@@ -35,6 +35,9 @@ class CreditTransaction(Base):
     balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
     ref_type: Mapped[str | None] = mapped_column(String(32))
     ref_id: Mapped[str | None] = mapped_column(String(64))
+    # deep_analysis 计费幂等：reserve / settle / release。
+    # 配合 partial unique index uq_credit_tx_deep_analysis 保证每个 report 只能有一次 reserve/settle/release。
+    operation: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

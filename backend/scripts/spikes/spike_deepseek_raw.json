@@ -1,0 +1,150 @@
+{
+  "deepseek-v4-flash": [
+    {
+      "id": 0,
+      "ok": true,
+      "elapsed_s": 1.9,
+      "signal": "bullish",
+      "confidence": 85,
+      "model": "deepseek-v4-flash",
+      "tokens": 211
+    },
+    {
+      "id": 1,
+      "ok": true,
+      "elapsed_s": 2.03,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-flash",
+      "tokens": 223
+    },
+    {
+      "id": 2,
+      "ok": true,
+      "elapsed_s": 1.72,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-flash",
+      "tokens": 212
+    },
+    {
+      "id": 3,
+      "ok": true,
+      "elapsed_s": 1.72,
+      "signal": "bullish",
+      "confidence": 85,
+      "model": "deepseek-v4-flash",
+      "tokens": 211
+    },
+    {
+      "id": 4,
+      "ok": true,
+      "elapsed_s": 1.85,
+      "signal": "bullish",
+      "confidence": 75,
+      "model": "deepseek-v4-flash",
+      "tokens": 229
+    },
+    {
+      "id": 5,
+      "ok": true,
+      "elapsed_s": 2.42,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-flash",
+      "tokens": 250
+    },
+    {
+      "id": 6,
+      "ok": true,
+      "elapsed_s": 2.04,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-flash",
+      "tokens": 224
+    },
+    {
+      "id": 7,
+      "ok": true,
+      "elapsed_s": 2.14,
+      "signal": "bullish",
+      "confidence": 75,
+      "model": "deepseek-v4-flash",
+      "tokens": 243
+    }
+  ],
+  "deepseek-v4-pro": [
+    {
+      "id": 0,
+      "ok": true,
+      "elapsed_s": 3.68,
+      "signal": "bullish",
+      "confidence": 85,
+      "model": "deepseek-v4-pro",
+      "tokens": 274
+    },
+    {
+      "id": 1,
+      "ok": true,
+      "elapsed_s": 2.84,
+      "signal": "bullish",
+      "confidence": 85,
+      "model": "deepseek-v4-pro",
+      "tokens": 246
+    },
+    {
+      "id": 2,
+      "ok": true,
+      "elapsed_s": 2.76,
+      "signal": "bullish",
+      "confidence": 75,
+      "model": "deepseek-v4-pro",
+      "tokens": 240
+    },
+    {
+      "id": 3,
+      "ok": true,
+      "elapsed_s": 3.37,
+      "signal": "bullish",
+      "confidence": 85,
+      "model": "deepseek-v4-pro",
+      "tokens": 290
+    },
+    {
+      "id": 4,
+      "ok": true,
+      "elapsed_s": 5.0,
+      "signal": "bullish",
+      "confidence": 75,
+      "model": "deepseek-v4-pro",
+      "tokens": 291
+    },
+    {
+      "id": 5,
+      "ok": true,
+      "elapsed_s": 3.27,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-pro",
+      "tokens": 268
+    },
+    {
+      "id": 6,
+      "ok": true,
+      "elapsed_s": 3.43,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-pro",
+      "tokens": 269
+    },
+    {
+      "id": 7,
+      "ok": true,
+      "elapsed_s": 4.45,
+      "signal": "bullish",
+      "confidence": 80,
+      "model": "deepseek-v4-pro",
+      "tokens": 292
+    }
+  ]
+}

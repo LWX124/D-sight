@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     social_fetch_count: int = 20
     fund_arb_backend: str = "sina"
     fund_arb_snapshot_seconds: int = 20
+    # 深度分析
+    deep_analysis_analyst_model: str = "deepseek-v4-flash"
+    deep_analysis_portfolio_model: str = "deepseek-v4-pro"
+    deep_analysis_max_concurrency: int = 8
+    deep_analysis_analyst_timeout_seconds: int = 45
+    deep_analysis_task_timeout_seconds: int = 300
+    deep_analysis_max_attempts: int = 3
+    deep_analysis_cache_hours: int = 4
+    deep_analysis_credits: int = 50
+    deep_analysis_worker_enabled: bool = False
+    deep_analysis_analysis_version: str = "v1"
 
 
 @lru_cache

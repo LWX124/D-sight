@@ -23,6 +23,7 @@ from app.kb import models as kb_models  # noqa: F401
 from app.news import models as news_models  # noqa: F401
 from app.social import models as social_models  # noqa: F401
 from app.fund_arb import models as fund_arb_models  # noqa: F401
+from app.deep_analysis import models as deep_analysis_models  # noqa: F401
 
 if os.environ.get("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
