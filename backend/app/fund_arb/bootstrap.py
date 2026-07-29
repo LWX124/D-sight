@@ -6,6 +6,7 @@ import logging
 import httpx
 from sqlalchemy import select
 
+from app.core.akshare_runtime import call_akshare
 from app.core.db import get_sessionmaker
 from app.fund_arb.fetchers import LBMA_GOLD_PM, MID_FX_SYMBOL, fetch_lbma_gold_pm, fetch_nav_history
 from app.fund_arb.job import _upsert_daily, _upsert_tracking
@@ -34,17 +35,17 @@ async def _fetch_symbol_history(symbol: str, days: int) -> dict[dt.date, float]:
                 continue
         return out
     if symbol.startswith("gb_"):
-        df = await asyncio.to_thread(ak.stock_us_daily, symbol=symbol[3:].upper())
+        df = await asyncio.to_thread(call_akshare, ak.stock_us_daily, symbol=symbol[3:].upper())
         df = df.tail(days + 10)
         return {pd.Timestamp(row["date"]).date(): float(row["close"])
                 for _, row in df.iterrows()}
     if symbol.startswith("nf_"):
-        df = await asyncio.to_thread(ak.futures_main_sina, symbol=symbol[3:])
+        df = await asyncio.to_thread(call_akshare, ak.futures_main_sina, symbol=symbol[3:])
         df = df.tail(days + 10)
         return {pd.Timestamp(row["日期"]).date(): float(row["收盘价"])
                 for _, row in df.iterrows()}
     if symbol.startswith(("sh", "sz")):
-        df = await asyncio.to_thread(ak.stock_zh_index_daily, symbol=symbol)
+        df = await asyncio.to_thread(call_akshare, ak.stock_zh_index_daily, symbol=symbol)
         df = df.tail(days + 10)
         return {pd.Timestamp(row["date"]).date(): float(row["close"])
                 for _, row in df.iterrows()}

@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.core.akshare_runtime import call_akshare
+
 _log = logging.getLogger(__name__)
 
 SPOT_FX_SINA = {"USD": "fx_susdcny", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
@@ -269,7 +271,7 @@ async def fetch_purchase_status() -> dict[str, dict]:
     """akshare 东财申赎状态（同步 → to_thread）。"""
     import akshare as ak
 
-    df = await asyncio.to_thread(ak.fund_purchase_em)
+    df = await asyncio.to_thread(call_akshare, ak.fund_purchase_em)
     out: dict[str, dict] = {}
     for _, row in df.iterrows():
         raw_limit = row.get("日累计限定金额", "")

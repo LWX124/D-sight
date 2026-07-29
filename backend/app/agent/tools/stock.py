@@ -2,6 +2,7 @@ import pandas as pd
 from langchain_core.tools import tool
 
 from app.agent.tools.safe import tool_guard
+from app.core.akshare_runtime import call_akshare
 
 
 def _sina_symbol(symbol: str) -> str:
@@ -32,7 +33,7 @@ def stock_quote(symbol: str) -> str:
     import akshare as ak
 
     sina = _sina_symbol(symbol)
-    df = ak.stock_zh_a_daily(symbol=sina, adjust="qfq")
+    df = call_akshare(ak.stock_zh_a_daily, symbol=sina, adjust="qfq")
     if df is None or df.empty:
         return f"错误：未查到 {symbol} 的行情数据，请核对代码或告知用户。"
     recent = df.tail(15)
@@ -54,7 +55,7 @@ def stock_financials(symbol: str) -> str:
     """
     import akshare as ak
 
-    df = ak.stock_financial_abstract(symbol=symbol.strip().zfill(6))
+    df = call_akshare(ak.stock_financial_abstract, symbol=symbol.strip().zfill(6))
     if df is None or df.empty:
         return f"错误：未查到 {symbol} 的财务数据，请核对代码或告知用户。"
     date_cols = [c for c in df.columns if c not in ("选项", "指标")]
