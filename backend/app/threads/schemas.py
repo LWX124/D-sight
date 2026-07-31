@@ -16,3 +16,4 @@ class ThreadOut(BaseModel):
     title: str
     created_at: dt.datetime
     updated_at: dt.datetime
+    last_message_at: dt.datetime
