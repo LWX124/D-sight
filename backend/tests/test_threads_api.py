@@ -16,6 +16,7 @@ async def test_thread_crud_flow(client, db_session):
     created = resp.json()
     tid = created["id"]
     assert created["title"] == "新对话"
+    assert created["last_message_at"]
 
     # 第二个 thread B（后建，updated_at 更新）——用于验证重命名后的排序
     tid_b = (await client.post("/api/threads/", json={}, headers=headers)).json()["id"]
@@ -25,12 +26,15 @@ async def test_thread_crud_flow(client, db_session):
     assert resp.status_code == 200
     patched = resp.json()
     assert patched["title"] == "茅台研究"
+    assert patched["last_message_at"] == created["last_message_at"]
     # PATCH 刷新 updated_at（2b 依赖：会话按最近活跃排序）
     assert patched["updated_at"] > created["updated_at"]
 
     # 重命名后 A 冒泡到最前（updated_at desc 生效），B 退居其后
     resp = await client.get("/api/threads/", headers=headers)
-    assert [t["id"] for t in resp.json()] == [tid, tid_b]
+    listed = resp.json()
+    assert [t["id"] for t in listed] == [tid, tid_b]
+    assert all(t["last_message_at"] for t in listed)
 
     assert (await client.delete(f"/api/threads/{tid}", headers=headers)).status_code == 204
     assert (await client.delete(f"/api/threads/{tid_b}", headers=headers)).status_code == 204

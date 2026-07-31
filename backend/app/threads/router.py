@@ -16,7 +16,13 @@ router = APIRouter(prefix="/api/threads", tags=["threads"])
 
 
 def _out(t: Thread) -> ThreadOut:
-    return ThreadOut(id=str(t.id), title=t.title, created_at=t.created_at, updated_at=t.updated_at)
+    return ThreadOut(
+        id=str(t.id),
+        title=t.title,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
+        last_message_at=t.last_message_at,
+    )
 
 
 async def _owned_thread(db: AsyncSession, user: User, thread_id: str) -> Thread:
