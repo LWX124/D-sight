@@ -15,13 +15,20 @@ import {
   type LangChainMessage,
 } from "@assistant-ui/react-langgraph";
 import { ensureFreshToken, loadInitialState } from "./history";
+import { withReasoning } from "./reasoning";
 import { getMountedKbIds } from "@/lib/kbMount";
 
 interface State {
   messages: LangChainMessage[];
 }
 
-const messageConverter = createMessageConverter(convertLangChainMessages);
+// withReasoning：把 DeepSeek 的 reasoning_content 归一成标准 reasoning block，
+// 使思考过程能渲染（详见 ./reasoning.ts）。
+const baseConverter = createMessageConverter(convertLangChainMessages);
+const messageConverter = {
+  toThreadMessages: (messages: LangChainMessage[]) =>
+    baseConverter.toThreadMessages(messages.map(withReasoning)),
+};
 
 // 缺陷 (a) 修复：挂载时先拉历史，加载完再以其为 initialState 建 runtime。
 // 上层用 key={threadId} 重建本组件 → 切换/刷新会话都会重新加载。

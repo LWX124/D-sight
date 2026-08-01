@@ -31,6 +31,20 @@ async def auth_and_thread(client, db_session, monkeypatch):
     config.get_settings.cache_clear()
 
 
+def test_make_title_normalizes_and_truncates():
+    """标题取自用户提问：折叠空白、超长补省略号、短标题原样。"""
+    from app.chat.router import TITLE_MAX, make_title
+
+    assert make_title("分析茅台") == "分析茅台"
+    # 换行/连续空格折叠成单空格（否则侧边栏渲染出空隙）
+    assert make_title("分析茅台\n\n重点看  护城河") == "分析茅台 重点看 护城河"
+    long = make_title("茅" * 100)
+    assert long.endswith("…")
+    assert len(long) == TITLE_MAX + 1  # 30 字正文 + 省略号
+    # 恰好等于上限时不加省略号
+    assert make_title("茅" * TITLE_MAX) == "茅" * TITLE_MAX
+
+
 async def test_chat_streams_fake_reply(auth_and_thread, client):
     headers, tid = auth_and_thread
     async with client.stream(
@@ -80,7 +94,7 @@ async def test_chat_sets_title_and_touches_thread(auth_and_thread, client):
     threads = (await client.get("/api/threads/", headers=headers)).json()
     me = next(t for t in threads if t["id"] == tid)
     assert me["title"].startswith("分析贵州茅台")
-    assert len(me["title"]) <= 30
+    assert len(me["title"]) <= 31  # 30 字正文 + 可能的省略号
     # 会话被"触碰"：updated_at 严格增大（发消息刷新排序时间）。
     assert me["updated_at"] > before
 

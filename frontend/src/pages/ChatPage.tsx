@@ -153,7 +153,15 @@ export default function ChatPage() {
                 <RuntimeProvider
                   key={threadId}
                   threadId={threadId}
-                  onSendResponse={(status) => setCreditNotice(status === 402)}
+                  onSendResponse={(status) => {
+                    setCreditNotice(status === 402);
+                    // 标题由后端用首条提问回填（chat/router.py 的 make_title），而侧栏列表是在
+                    // "创建会话之后、发消息之前"拉的，那时仍是"新对话"，此后再无刷新。
+                    // 用 onResponse 而非 onFinish：后端在开流前就已 commit 标题与
+                    // last_message_at，响应头到达时数据已入库；放到 onFinish 则要等整轮
+                    // 跑完（深度分析可达数分钟）标题才更新。
+                    if (status === 200) qc.invalidateQueries({ queryKey: threadsKey });
+                  }}
                   onFinish={() => {
                     pendingMessageRef.current = null;
                     qc.invalidateQueries({ queryKey: creditsKey });

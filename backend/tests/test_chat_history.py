@@ -63,6 +63,25 @@ async def test_messages_restored_after_chat(ck_client, db_session):
     assert "假回复" in msgs[1]["content"]
 
 
+def test_to_ui_preserves_reasoning_content():
+    """DeepSeek 思维链（additional_kwargs.reasoning_content）必须随历史回传。
+
+    否则刷新页面后思考过程消失，与流式期间不一致。无 reasoning 的消息不应带上该键。
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.chat.history import _to_ui
+
+    out = _to_ui([
+        HumanMessage(content="茅台多少钱"),
+        AIMessage(content="约 1500 元", additional_kwargs={"reasoning_content": "先查行情…"}),
+        AIMessage(content="没有思考过程"),
+    ])
+    assert out[0] == {"type": "human", "content": "茅台多少钱"}
+    assert out[1]["additional_kwargs"] == {"reasoning_content": "先查行情…"}
+    assert "additional_kwargs" not in out[2]
+
+
 async def test_empty_thread_returns_empty_list(ck_client, db_session):
     token = await _register(ck_client, db_session, f"hist-empty-{uuid.uuid4().hex[:8]}@test.dev")
     headers = {"Authorization": f"Bearer {token}"}

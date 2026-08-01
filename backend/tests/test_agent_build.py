@@ -177,21 +177,29 @@ class _RealStreamingModel(BaseChatModel):
     只有真模型才会走 LangChain 的 callback/config 传播路径——token 双发只在这条路上暴露。
     """
 
+    seen_kwargs: list = []
+
     @property
     def _llm_type(self) -> str:
         return "real-streaming-stub"
 
-    def bind_tools(self, tools: Any, **kwargs: Any) -> "_RealStreamingModel":
-        return self
+    def bind_tools(self, tools: Any, **kwargs: Any):
+        # 必须模拟真实 provider：经 BaseChatModel.bind 返回 _ChatModelBinding。
+        # 早先这里 `return self` 绕过了 RunnableBinding 层，导致 token 双发漏检——
+        # binding 的 _merge_configs 会把 callbacks 与 contextvar 里的 manager 合并，
+        # 空 callbacks 静音不了内部模型。tools 存进 kwargs，供解包断言。
+        return self.bind(tools=tools)
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content="abc"))])
 
     def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        self.seen_kwargs.append(kwargs)
         for t in ("a", "b", "c"):
             yield ChatGenerationChunk(message=AIMessageChunk(content=t, id="stub-msg"))
 
     async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        self.seen_kwargs.append(kwargs)
         for t in ("a", "b", "c"):
             yield ChatGenerationChunk(message=AIMessageChunk(content=t, id="stub-msg"))
 
@@ -205,6 +213,11 @@ async def test_wrapped_model_does_not_double_stream_tokens(tmp_path, monkeypatch
     （"前置前置步骤步骤"）。落库的 AIMessage 由外层合并得出仍正确，故刷新页面看着正常。
 
     FAKE_LLM 路径不经过本包装层，所以此前的假模型测试覆盖不到。
+
+    第二次回归（本次）：桩的 ``bind_tools`` 原先 ``return self``，绕过了真实的
+    ``_ChatModelBinding``；而 binding 的 ``_merge_configs`` 会把显式 ``callbacks: []``
+    与 contextvar 里的 manager **合并**，静音失效 → 线上仍旧重复。现在桩经 ``.bind()``
+    返回真 binding，并顺带断言绑定的 tools 未在解包中丢失。
     """
     monkeypatch.setenv("FAKE_LLM", "1")
     from app.core import config
@@ -213,8 +226,10 @@ async def test_wrapped_model_does_not_double_stream_tokens(tmp_path, monkeypatch
     import app.agent.workspace as ws_mod
 
     monkeypatch.setattr(ws_mod, "WORKSPACES_ROOT", tmp_path)
+    inner = _RealStreamingModel()
+    inner.seen_kwargs = []
     monkeypatch.setattr(
-        build_mod, "_make_model", lambda: ContentRiskRetryChatModel(inner=_RealStreamingModel())
+        build_mod, "_make_model", lambda: ContentRiskRetryChatModel(inner=inner)
     )
 
     agent = build_agent("t-no-dup")
@@ -229,6 +244,65 @@ async def test_wrapped_model_does_not_double_stream_tokens(tmp_path, monkeypatch
             delivered.append(chunk[0].content)
 
     assert delivered == ["a", "b", "c"], f"token 被重复投递：{delivered}"
+    # 绕过公开入口后，bind_tools 绑定的 tools 必须仍随调用传到底层模型（否则 agent 无工具可用）
+    assert inner.seen_kwargs, "内部模型未被调用"
+    assert all("tools" in kw for kw in inner.seen_kwargs), f"tools 丢失：{inner.seen_kwargs}"
+
+
+class _UsageModel(BaseChatModel):
+    """真 BaseChatModel 桩：每次调用报告 15 token（用于查双计费）。"""
+
+    @property
+    def _llm_type(self) -> str:
+        return "usage-stub"
+
+    def bind_tools(self, tools: Any, **kwargs: Any):
+        return self.bind(tools=tools)
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(
+            content="abc",
+            usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            response_metadata={"model_name": "deepseek-v4-flash"},
+        ))])
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return self._generate(messages, stop, None, **kwargs)
+
+
+async def test_non_streaming_path_does_not_double_count_tokens(tmp_path, monkeypatch):
+    """回归：非流式（ainvoke）路径不得把 token 计费两次。
+
+    与 token 双发同源：``_agenerate`` 走 ``inner.ainvoke`` 时内部模型自己也发一轮
+    ``on_llm_end``，``UsageMetadataCallbackHandler`` 用 add_usage 累加 → 15 变 30，
+    用户被多扣一倍积分。主 agent 走流式故未暴露，但 CapabilityRouter 用的就是
+    ``ainvoke``。修复是直取 ``_agenerate`` 私有钩子（同 _astream 的处理）。
+    """
+    from langchain_core.callbacks import UsageMetadataCallbackHandler
+
+    monkeypatch.setenv("FAKE_LLM", "1")
+    from app.core import config
+
+    config.get_settings.cache_clear()
+    import app.agent.workspace as ws_mod
+
+    monkeypatch.setattr(ws_mod, "WORKSPACES_ROOT", tmp_path)
+    monkeypatch.setattr(
+        build_mod, "_make_model", lambda: ContentRiskRetryChatModel(inner=_UsageModel())
+    )
+
+    agent = build_agent("t-no-double-charge")
+    cb = UsageMetadataCallbackHandler()
+    await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "hi"}]},
+        config={
+            "configurable": {"thread_id": "t-no-double-charge"},
+            "recursion_limit": 30,
+            "callbacks": [cb],
+        },
+    )
+    total = sum(v.get("total_tokens", 0) for v in cb.usage_metadata.values())
+    assert total == 15, f"token 被重复计费（多扣积分）：{total}"
 
 
 async def test_stream_retries_content_risk_before_first_chunk():

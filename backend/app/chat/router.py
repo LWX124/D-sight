@@ -43,6 +43,18 @@ async def _owned_thread(db: AsyncSession, user: User, thread_id: str | None) -> 
     return t
 
 
+def make_title(text: str) -> str:
+    """用用户首条提问生成会话标题：折叠空白 + 超长截断加省略号。
+
+    换行必须折叠，否则多行提问在侧边栏渲染出诡异空隙。侧栏本身有 CSS truncate，
+    但窄字符（英文）在 30 字内不一定溢出容器，故超长时显式补 "…" 以示截断。
+    """
+    normalized = " ".join(text.split())
+    if len(normalized) <= TITLE_MAX:
+        return normalized
+    return normalized[:TITLE_MAX].rstrip() + "…"
+
+
 def _extract_inputs(request: ChatRequest) -> tuple[list, str]:
     """commands → langchain 消息列表 + 首条文本（供标题）。"""
     messages: list = []
@@ -88,7 +100,7 @@ async def chat(
     if any(isinstance(message, HumanMessage) for message in input_messages):
         thread.last_message_at = datetime.now(UTC)
     if thread.title == "新对话" and first_text:
-        thread.title = first_text[:TITLE_MAX]
+        thread.title = make_title(first_text)
     await db.commit()
 
     thread_id = str(thread.id)

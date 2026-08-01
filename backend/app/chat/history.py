@@ -50,7 +50,13 @@ def _to_ui(messages: list[BaseMessage]) -> list[dict]:
         text = _text(m.content)
         if not text:  # 纯 tool_call 的 ai（content=""）无文本可恢复，跳过
             continue
-        out.append({"type": t, "content": text})
+        item: dict = {"type": t, "content": text}
+        # DeepSeek 思维链存在 additional_kwargs.reasoning_content；一并回传，
+        # 使刷新后思考过程与流式期间一致（前端 withReasoning 负责归一成 reasoning part）。
+        reasoning = (getattr(m, "additional_kwargs", None) or {}).get("reasoning_content")
+        if isinstance(reasoning, str) and reasoning:
+            item["additional_kwargs"] = {"reasoning_content": reasoning}
+        out.append(item)
     return out
 
 

@@ -44,10 +44,70 @@ ALLOWED_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
 _CONTENT_RISK_MARKER = "Content Exists Risk"
 _MAX_ATTEMPTS = 3  # 1 次原始 + 2 次重试
 
-# 内部模型静音用的 config：见 ContentRiskRetryChatModel._stream 的"双发"说明。
-# 不传 config 时 LangChain 会经 contextvar 把外层节点的 callbacks 传给内部模型；
-# 显式给空 callbacks 才能覆盖掉它（ensure_config 里非 None 的显式值优先）。
-_SILENCE_INNER = {"callbacks": []}
+def _inner_raw_astream(inner: Any, messages: list[BaseMessage], stop, kwargs):
+    """绕过内部模型的 callback 层，直取其 ``_astream`` 私有钩子。
+
+    见 ``ContentRiskRetryChatModel._stream`` 的"双发"说明：``.stream/.astream`` 是
+    公开入口，无法静音；只有私有钩子完全不触发 ``on_llm_new_token``。
+    ``bind_tools`` 后 inner 是 ``_ChatModelBinding``（``RunnableBinding``），
+    绑定的 ``tools`` 存在 ``.kwargs`` 里，必须手动并入 kwargs 才不会丢工具。
+    """
+    model, bound_kwargs = _unwrap_binding(inner)
+    merged = {**bound_kwargs, **kwargs}
+    if hasattr(model, "_astream"):
+        return model._astream(messages, stop=stop, **merged)
+    # 非 BaseChatModel 的可流对象（测试桩等）没有私有钩子；它们不是 Runnable，
+    # 不参与 callback 传播，走公开入口不会造成双发。
+    return model.astream(messages, stop=stop, **merged)
+
+
+def _inner_raw_stream(inner: Any, messages: list[BaseMessage], stop, kwargs):
+    """``_inner_raw_astream`` 的同步版。"""
+    model, bound_kwargs = _unwrap_binding(inner)
+    merged = {**bound_kwargs, **kwargs}
+    if hasattr(model, "_stream"):
+        return model._stream(messages, stop=stop, **merged)
+    return model.stream(messages, stop=stop, **merged)
+
+
+async def _inner_raw_agenerate(inner: Any, messages: list[BaseMessage], stop, kwargs):
+    """非流式版：绕过 callback 层直取 ``_agenerate``，返回 ``AIMessage``。
+
+    与流式同源的问题：走 ``inner.ainvoke`` 时内部模型自己也发一轮 ``on_llm_end``，
+    ``UsageMetadataCallbackHandler`` 于是把同一次调用的 token **累加两次**
+    （usage.py 的 on_llm_end 用 add_usage 合并），用户被多扣一倍积分。
+    主 agent 走流式所以未暴露，但 CapabilityRouter 等 ``ainvoke`` 路径会中招。
+    """
+    model, bound_kwargs = _unwrap_binding(inner)
+    merged = {**bound_kwargs, **kwargs}
+    if hasattr(model, "_agenerate"):
+        result = await model._agenerate(messages, stop=stop, **merged)
+        return result.generations[0].message
+    return await model.ainvoke(messages, stop=stop, **merged)
+
+
+def _inner_raw_generate(inner: Any, messages: list[BaseMessage], stop, kwargs):
+    """``_inner_raw_agenerate`` 的同步版。"""
+    model, bound_kwargs = _unwrap_binding(inner)
+    merged = {**bound_kwargs, **kwargs}
+    if hasattr(model, "_generate"):
+        return model._generate(messages, stop=stop, **merged).generations[0].message
+    return model.invoke(messages, stop=stop, **merged)
+
+
+def _unwrap_binding(inner: Any) -> tuple[Any, dict]:
+    """剥掉 RunnableBinding 外壳，返回 (底层 chat model, 累积的绑定 kwargs)。
+
+    多层 bind 会嵌套多层 binding（如 bind_tools 后再 with_config），故循环剥离。
+    外层绑定的 kwargs 优先（后 bind 覆盖先 bind）。
+    """
+    bound_kwargs: dict = {}
+    model = inner
+    while hasattr(model, "bound") and hasattr(model, "kwargs"):
+        bound_kwargs = {**model.kwargs, **bound_kwargs}
+        model = model.bound
+    return model, bound_kwargs
+
 
 SYSTEM_PROMPT = """你是 D-sight 投研助手，服务中文投资者。
 
@@ -100,7 +160,7 @@ class ContentRiskRetryChatModel(BaseChatModel):
     ) -> ChatResult:
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
-                msg = self.inner.invoke(messages, stop=stop, **kwargs)
+                msg = _inner_raw_generate(self.inner, messages, stop, kwargs)
                 break
             except openai.BadRequestError as exc:
                 if _is_content_risk(exc) and attempt < _MAX_ATTEMPTS:
@@ -119,7 +179,7 @@ class ContentRiskRetryChatModel(BaseChatModel):
     ) -> ChatResult:
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
-                msg = await self.inner.ainvoke(messages, stop=stop, **kwargs)
+                msg = await _inner_raw_agenerate(self.inner, messages, stop, kwargs)
                 break
             except openai.BadRequestError as exc:
                 if _is_content_risk(exc) and attempt < _MAX_ATTEMPTS:
@@ -144,12 +204,15 @@ class ContentRiskRetryChatModel(BaseChatModel):
         ``ChatGenerationChunk`` 交回 ``BaseChatModel.stream``，由其统一触发
         ``on_llm_new_token``（即 T5 的 ``stream_mode="messages"`` 数据源）。
 
-        **必须给内部流显式传 ``_SILENCE_INNER``**：``.stream`` 是公开入口，不传 config
-        时 LangChain 会经 contextvar 自动继承外层（LangGraph 节点）的 callbacks，内部
-        模型于是自己也发一轮 ``on_llm_new_token``；加上外层这轮，同一个 token 会被投递
-        两次，前端渲染成"前置前置步骤步骤"。落库的 AIMessage 由外层合并得出仍是对的，
-        所以刷新页面看着正常——只有流式过程重复。"不传 callbacks"挡不住 contextvar，
-        只有显式空 callbacks 能覆盖。
+        **必须绕开内部模型的公开入口**：``.stream/.astream`` 会经 contextvar 自动继承
+        外层（LangGraph 节点）的 callbacks，内部模型于是自己也发一轮
+        ``on_llm_new_token``；加上外层这轮，同一个 token 被投递两次，前端渲染成
+        "前置前置步骤步骤"。落库的 AIMessage 由外层合并得出仍是对的，所以刷新页面看着
+        正常——只有流式过程重复。传 ``config={"callbacks": []}`` **挡不住**：
+        ``RunnableBinding._merge_configs`` 用 ``merge_configs`` 把显式 callbacks 与
+        contextvar 里的 manager **合并**（config.py:merge_configs 的 callbacks 分支），
+        空列表合并后仍是外层 manager。故这里直取私有钩子 ``_astream``，它完全不经
+        callback 层；绑定的 tools 由 ``_unwrap_binding`` 手动并回 kwargs。
 
         **重试契约**：仅当"启动流、产出第一个 chunk 之前"抛出 Content Exists Risk
         （400）时重试（共 3 次尝试）；一旦已产出任何 chunk 便无法回撤，后续错误直接抛出。
@@ -158,9 +221,7 @@ class ContentRiskRetryChatModel(BaseChatModel):
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             started = False
             try:
-                for chunk in self.inner.stream(
-                    messages, config=_SILENCE_INNER, stop=stop, **kwargs
-                ):
+                for chunk in _inner_raw_stream(self.inner, messages, stop, kwargs):
                     started = True
                     yield _to_gen_chunk(chunk)
             except openai.BadRequestError as exc:
@@ -180,9 +241,7 @@ class ContentRiskRetryChatModel(BaseChatModel):
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             started = False
             try:
-                async for chunk in self.inner.astream(
-                    messages, config=_SILENCE_INNER, stop=stop, **kwargs
-                ):
+                async for chunk in _inner_raw_astream(self.inner, messages, stop, kwargs):
                     started = True
                     yield _to_gen_chunk(chunk)
             except openai.BadRequestError as exc:
