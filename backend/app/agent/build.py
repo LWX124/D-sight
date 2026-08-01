@@ -22,6 +22,7 @@ from typing import Any
 
 import openai
 from deepagents import create_deep_agent
+from deepagents.middleware.skills import SkillsMiddleware
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -202,6 +203,33 @@ def _make_model():
     return ContentRiskRetryChatModel(inner=model)
 
 
+def make_router_llm():
+    """Router 用的 LLM，复用主模型配置（首期）。
+
+    独立实例化，避免与主 agent 共享 retry/callback 状态；后续可换更轻量模型。
+    """
+    return _make_model()
+
+
+class ReloadingSkillsMiddleware(SkillsMiddleware):
+    """每轮重新扫描 sources，绕过 ``skills_metadata`` 已存在的缓存跳过。
+
+    基类 ``SkillsMiddleware.abefore_agent`` 在 ``"skills_metadata" in state``
+    时直接 ``return None``（deepagents/middleware/skills.py:960），导致同一
+    thread 第二轮起 DeepAgent 复用首轮 checkpoint 中的 skills 元数据，
+    Skill Router 动态选择的 capabilities 无法生效。此处在委托基类前先
+    ``state.pop("skills_metadata", None)``，强制每轮重扫 workspace/skills。
+    """
+
+    def before_agent(self, state, runtime, config):
+        state.pop("skills_metadata", None)
+        return super().before_agent(state, runtime, config)
+
+    async def abefore_agent(self, state, runtime, config):
+        state.pop("skills_metadata", None)
+        return await super().abefore_agent(state, runtime, config)
+
+
 def make_checkpointer(database_url: str):
     """返回 ``AsyncPostgresSaver.from_conn_string`` 的 async context（调用方负责 .setup()）。
 
@@ -214,12 +242,16 @@ def make_checkpointer(database_url: str):
     return AsyncPostgresSaver.from_conn_string(url)
 
 
-def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None, user_id=None):
+def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None, user_id=None, route_plan=None):
     ws = get_thread_workspace(thread_id)
     if skill_rows is not None:
-        from app.skills.materialize import write_skills
+        from app.agent.orchestrator import materialize_plan
 
-        write_skills(ws, skill_rows)
+        if route_plan is not None:
+            materialize_plan(route_plan, ws, skill_rows)
+        else:
+            from app.skills.materialize import write_skills
+            write_skills(ws, skill_rows)
     # 新 workspace 不再全量拷贝 skills；无条件建空目录（幂等），
     # 使 skill_rows=None 的直连调用（test_real_smoke 等）也能组装。
     (ws / "skills").mkdir(exist_ok=True)
@@ -248,7 +280,7 @@ def build_agent(thread_id: str, checkpointer=None, skill_rows=None, kb_ids=None,
         model=_make_model(),
         tools=tools,
         backend=make_backend(ws),
-        skills=[str(ws / "skills")],
+        middleware=[ReloadingSkillsMiddleware(backend=make_backend(ws), sources=[str(ws / "skills")])],
         system_prompt=prompt,
         checkpointer=checkpointer,
     )

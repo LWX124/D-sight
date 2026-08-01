@@ -156,7 +156,9 @@ log "启动后端  http://localhost:$BACKEND_PORT"
 # --reload-dir app：只监视源码目录。agent 跑 skill 时会把工具文件物化进 var/workspaces/，
 # 默认的 --reload 监视整个 backend/ 会把这些写入当成代码变更、重启服务器，正在跑的
 # /api/chat 流被拦腰砍断 → 前端卡死。限定到 app/ 后 var/ 的写入不再触发 reload。
-( cd "$BACKEND" && PYTHONUNBUFFERED=1 exec uv run uvicorn app.main:create_app --factory --reload --reload-dir app --port "$BACKEND_PORT" ) &
+# --reload-exclude app/deep_analysis：开发期频繁编辑 deep_analysis 会反复重启、切断
+# 正在跑的 /api/chat 流式响应；该目录按需手动重启，不参与热重载。
+( cd "$BACKEND" && PYTHONUNBUFFERED=1 exec uv run uvicorn app.main:create_app --factory --reload --reload-dir app --reload-exclude 'app/deep_analysis' --port "$BACKEND_PORT" ) &
 PIDS+=($!)
 
 log "安装前端依赖（如缺）"

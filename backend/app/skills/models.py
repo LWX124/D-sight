@@ -6,8 +6,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.core.db import Base
+from app.kb.models import EMBEDDING_DIM
 
 
 class Skill(Base):
@@ -29,6 +31,9 @@ class Skill(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_source_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class SkillFile(Base):

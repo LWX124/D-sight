@@ -17,6 +17,23 @@ _log = logging.getLogger(__name__)
 SPOT_FX_SINA = {"USD": "fx_susdcny", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
 MID_FX_SYMBOL = {"USD": "USDCNH_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
 
+# Sina hq.sinajs.cn 不支持的代码：实测返回空 payload 或全 0，每个 tick 都打 warning
+# 且浪费一次 HTTP 请求。这些代码的实时价格已由东财 push2/kline 兜底（见
+# _EM_PUSH2_CODES / _EM_KLINE_CODES / fetch_realtime_prices）。
+# 1) 中证指数代码（sh9xxxxx / sh000xxx 申赎地）：新浪不支持，直接跳过。
+#    东财 secid 前缀规则：930xxx/950xxx 用 2.（个股/指数混编），000xxx 用 1.（上证指数）。
+# 2) 部分 LOF 场内价新浪返回 0：由腾讯 qt.gtimg.cn 兜底。
+SINA_UNSUPPORTED_INDEXES = frozenset({
+    "sh930094", "sh930713", "sh930720", "sh930875", "sh930898",
+    "sh930914", "sh930917", "sh930997", "sh950090",
+    "sh000922", "sh000961", "sh000979",
+})
+# 东财 secid 前缀：sh000xxx 用 1.（上证指数），其余 sh9xxxxx 用 2.
+EM_INDEX_PREFIX1 = frozenset({"sh000922", "sh000961", "sh000979"})
+SINA_UNSUPPORTED_LOFS = frozenset({
+    "sz161604", "sz165523",  # 新浪返回空；腾讯兜底
+})
+
 _SINA_HEADERS = {"Referer": "https://finance.sina.com.cn"}
 _EM_HEADERS = {"Referer": "http://fundf10.eastmoney.com/"}
 
@@ -216,9 +233,9 @@ async def _fetch_price_tencent(symbol: str) -> float | None:
         return None
 
 
-async def _fetch_price_em_push2(code: str) -> float | None:
+async def _fetch_price_em_push2(code: str, secid_prefix: str = "2") -> float | None:
     url = "https://push2.eastmoney.com/api/qt/stock/get"
-    params = {"secid": f"2.{code}", "fields": "f43"}
+    params = {"secid": f"{secid_prefix}.{code}", "fields": "f43"}
     async with httpx.AsyncClient(timeout=10, headers=_EM_PUSH2_HEADERS) as c:
         r = await c.get(url, params=params)
         r.raise_for_status()
@@ -229,9 +246,9 @@ async def _fetch_price_em_push2(code: str) -> float | None:
     return float(val) / 100.0
 
 
-async def _fetch_price_em_kline(code: str) -> float | None:
+async def _fetch_price_em_kline(code: str, secid_prefix: str = "2") -> float | None:
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
-    params = {"secid": f"2.{code}", "fields1": "f1", "fields2": "f51,f52,f53", "klt": 101, "fqt": 0, "lmt": 1}
+    params = {"secid": f"{secid_prefix}.{code}", "fields1": "f1", "fields2": "f51,f52,f53", "klt": 101, "fqt": 0, "lmt": 1}
     async with httpx.AsyncClient(timeout=10, headers=_EM_PUSH2_HEADERS) as c:
         r = await c.get(url, params=params)
         r.raise_for_status()
@@ -250,12 +267,18 @@ async def fetch_realtime_prices(fund_codes: list[str]) -> dict[str, float]:
     async def _one(fc: str) -> tuple[str, float | None]:
         code = fc.removeprefix("sh")
         try:
-            if code.startswith("000"):
-                p = await _fetch_price_tencent(fc)
-            elif code in _EM_PUSH2_CODES:
+            if code in _EM_PUSH2_CODES:
                 p = await _fetch_price_em_push2(code)
             elif code in _EM_KLINE_CODES:
                 p = await _fetch_price_em_kline(code)
+            elif fc in SINA_UNSUPPORTED_INDEXES:
+                # 中证指数代码新浪不支持。东财 secid 前缀按交易所/类型区分：
+                # sh000xxx（上证指数）用 1.，sh9xxxxx（中证）用 2.。
+                prefix = "1" if fc in EM_INDEX_PREFIX1 else "2"
+                p = (await _fetch_price_em_push2(code, prefix)
+                     or await _fetch_price_em_kline(code, prefix))
+            elif fc in SINA_UNSUPPORTED_LOFS:
+                p = await _fetch_price_tencent(fc)
             else:
                 return fc, None
         except Exception:

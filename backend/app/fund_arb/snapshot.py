@@ -6,7 +6,15 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.fund_arb.fetchers import MID_FX_SYMBOL, SPOT_FX_SINA, Quote, QuoteFetcher, fetch_realtime_prices
+from app.fund_arb.fetchers import (
+    MID_FX_SYMBOL,
+    SINA_UNSUPPORTED_INDEXES,
+    SINA_UNSUPPORTED_LOFS,
+    SPOT_FX_SINA,
+    Quote,
+    QuoteFetcher,
+    fetch_realtime_prices,
+)
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 from app.fund_arb.valuation import (
     bond_growth_valuation,
@@ -208,7 +216,11 @@ async def rebuild_snapshots(session_factory, fetcher: QuoteFetcher,
         ctx = await _load_context(db)
     symbols: set[str] = set()
     for f in ctx["funds"]:
-        symbols.add(f.sina_symbol)
+        sym = f.sina_symbol
+        # 新浪不支持的代码不入批量请求：否则每个 tick 都打 warning 且拿不到数据，
+        # 这些代码的实时价格由 fetch_realtime_prices 的东财/腾讯兜底路由覆盖。
+        if sym not in SINA_UNSUPPORTED_INDEXES and sym not in SINA_UNSUPPORTED_LOFS:
+            symbols.add(sym)
         if f.tracking_symbol != "-":
             symbols.add(f.tracking_symbol)
         if f.currency:
