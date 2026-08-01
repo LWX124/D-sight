@@ -60,7 +60,11 @@ async def list_threads(
             Thread.deleted_at.is_(None),
             Thread.type == "chat",
         )
-        .order_by(Thread.updated_at.desc())
+        .order_by(
+            Thread.last_message_at.desc(),
+            Thread.created_at.desc(),
+            Thread.id.desc(),
+        )
     )
     return [_out(t) for t in rows]
 

@@ -85,6 +85,8 @@ async def chat(
         except service.InsufficientCredits:
             raise HTTPException(402, "积分不足")
     input_messages, first_text = _extract_inputs(request)
+    if any(isinstance(message, HumanMessage) for message in input_messages):
+        thread.last_message_at = datetime.now(UTC)
     if thread.title == "新对话" and first_text:
         thread.title = first_text[:TITLE_MAX]
     await db.commit()

@@ -85,6 +85,61 @@ async def test_chat_sets_title_and_touches_thread(auth_and_thread, client):
     assert me["updated_at"] > before
 
 
+async def test_chat_updates_last_message_at(auth_and_thread, client):
+    """发送聊天消息应更新 thread 的 last_message_at。"""
+    from app.core.db import get_sessionmaker
+    from app.threads.models import Thread
+
+    headers, tid = auth_and_thread
+    async with get_sessionmaker()() as db:
+        thread = await db.get(Thread, uuid.UUID(tid))
+        initial_last_message_at = thread.last_message_at
+
+    await asyncio.sleep(0.02)
+
+    async with client.stream(
+        "POST", "/api/chat", json=_chat_body(tid, "测试"), headers=headers
+    ) as resp:
+        assert resp.status_code == 200
+        async for _ in resp.aiter_bytes():
+            pass
+
+    async with get_sessionmaker()() as db:
+        thread = await db.get(Thread, uuid.UUID(tid))
+        assert thread.last_message_at > initial_last_message_at
+
+
+async def test_tool_result_does_not_update_last_message_at(auth_and_thread, client):
+    """仅回传工具结果不属于用户消息，不应更新 last_message_at。"""
+    from app.core.db import get_sessionmaker
+    from app.threads.models import Thread
+
+    headers, tid = auth_and_thread
+    async with get_sessionmaker()() as db:
+        thread = await db.get(Thread, uuid.UUID(tid))
+        initial_last_message_at = thread.last_message_at
+
+    body = {
+        "commands": [
+            {
+                "type": "add-tool-result",
+                "toolCallId": "test-call",
+                "result": "ok",
+            }
+        ],
+        "threadId": tid,
+        "state": None,
+    }
+    async with client.stream("POST", "/api/chat", json=body, headers=headers) as resp:
+        assert resp.status_code == 200
+        async for _ in resp.aiter_bytes():
+            pass
+
+    async with get_sessionmaker()() as db:
+        thread = await db.get(Thread, uuid.UUID(tid))
+        assert thread.last_message_at == initial_last_message_at
+
+
 async def test_timeout_surfaces_error_to_client(auth_and_thread, client, monkeypatch):
     """回归：单轮超时不得静默——必须给前端一个可见提示，而不是空流。
 

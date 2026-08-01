@@ -18,7 +18,7 @@ async def test_thread_crud_flow(client, db_session):
     assert created["title"] == "新对话"
     assert created["last_message_at"]
 
-    # 第二个 thread B（后建，updated_at 更新）——用于验证重命名后的排序
+    # 第二个 thread B（后建）——用于验证重命名不改变聊天活跃排序
     tid_b = (await client.post("/api/threads/", json={}, headers=headers)).json()["id"]
 
     await asyncio.sleep(0.01)  # 确保 updated_at 严格晚于 created_at，避免同毫秒 flaky
@@ -27,13 +27,12 @@ async def test_thread_crud_flow(client, db_session):
     patched = resp.json()
     assert patched["title"] == "茅台研究"
     assert patched["last_message_at"] == created["last_message_at"]
-    # PATCH 刷新 updated_at（2b 依赖：会话按最近活跃排序）
     assert patched["updated_at"] > created["updated_at"]
 
-    # 重命名后 A 冒泡到最前（updated_at desc 生效），B 退居其后
+    # 重命名只推进 updated_at，不应改变 last_message_at 排序
     resp = await client.get("/api/threads/", headers=headers)
     listed = resp.json()
-    assert [t["id"] for t in listed] == [tid, tid_b]
+    assert [t["id"] for t in listed] == [tid_b, tid]
     assert all(t["last_message_at"] for t in listed)
 
     assert (await client.delete(f"/api/threads/{tid}", headers=headers)).status_code == 204
