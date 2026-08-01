@@ -40,13 +40,14 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
-            path="/*"
+            path="/chat/:threadId?"
             element={
               <RequireAuth>
                 <ChatPage />
               </RequireAuth>
             }
           />
+          <Route path="/*" element={<Navigate to="/chat/new" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

@@ -16,8 +16,9 @@ async def test_thread_crud_flow(client, db_session):
     created = resp.json()
     tid = created["id"]
     assert created["title"] == "新对话"
+    assert created["last_message_at"]
 
-    # 第二个 thread B（后建，updated_at 更新）——用于验证重命名后的排序
+    # 第二个 thread B（后建）——用于验证重命名不改变聊天活跃排序
     tid_b = (await client.post("/api/threads/", json={}, headers=headers)).json()["id"]
 
     await asyncio.sleep(0.01)  # 确保 updated_at 严格晚于 created_at，避免同毫秒 flaky
@@ -25,12 +26,14 @@ async def test_thread_crud_flow(client, db_session):
     assert resp.status_code == 200
     patched = resp.json()
     assert patched["title"] == "茅台研究"
-    # PATCH 刷新 updated_at（2b 依赖：会话按最近活跃排序）
+    assert patched["last_message_at"] == created["last_message_at"]
     assert patched["updated_at"] > created["updated_at"]
 
-    # 重命名后 A 冒泡到最前（updated_at desc 生效），B 退居其后
+    # 重命名只推进 updated_at，不应改变 last_message_at 排序
     resp = await client.get("/api/threads/", headers=headers)
-    assert [t["id"] for t in resp.json()] == [tid, tid_b]
+    listed = resp.json()
+    assert [t["id"] for t in listed] == [tid_b, tid]
+    assert all(t["last_message_at"] for t in listed)
 
     assert (await client.delete(f"/api/threads/{tid}", headers=headers)).status_code == 204
     assert (await client.delete(f"/api/threads/{tid_b}", headers=headers)).status_code == 204
@@ -38,7 +41,21 @@ async def test_thread_crud_flow(client, db_session):
     assert resp.json() == []
 
 
-async def test_thread_isolation_between_users(client, db_session):
+async def test_thread_detail_is_owned(client, db_session):
+    headers_a = await _auth_headers(client, db_session, "th-detail-a@test.dev")
+    headers_b = await _auth_headers(client, db_session, "th-detail-b@test.dev")
+    created = (await client.post("/api/threads/", json={}, headers=headers_a)).json()
+    tid = created["id"]
+
+    resp = await client.get(f"/api/threads/{tid}", headers=headers_a)
+    assert resp.status_code == 200
+    assert resp.json() == created
+
+    assert (await client.get(f"/api/threads/{tid}", headers=headers_b)).status_code == 404
+    assert (await client.get("/api/threads/not-a-uuid", headers=headers_a)).status_code == 404
+
+
+
     headers_a = await _auth_headers(client, db_session, "th-a@test.dev")
     headers_b = await _auth_headers(client, db_session, "th-b@test.dev")
 

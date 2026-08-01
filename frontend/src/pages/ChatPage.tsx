@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
-import { Thread } from "@/chat/Thread";
+import { DraftThreadComposer, Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Panel, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
 import { KbMountSelector } from "@/chat/KbMountSelector";
 import { creditsKey, fetchCredits } from "@/lib/credits";
@@ -21,16 +21,6 @@ async function listThreads(): Promise<ThreadT[]> {
   return r.json();
 }
 
-async function createThread(): Promise<ThreadT> {
-  const r = await apiFetch("/api/threads/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-  if (!r.ok) throw new Error("新建会话失败");
-  return r.json();
-}
-
 const PANEL_TITLES: Record<Panel, string> = {
   chat: "对话",
   news: "7x24h",
@@ -41,43 +31,80 @@ const PANEL_TITLES: Record<Panel, string> = {
 };
 
 export default function ChatPage() {
+  const { threadId } = useParams<{ threadId?: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<Panel>("chat");
   const [creditNotice, setCreditNotice] = useState(false);
-  const autoCreating = useRef(false);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createLockRef = useRef(false);
+  const pendingMessageRef = useRef<string | null>(null);
 
-  const { data: threads } = useQuery({ queryKey: threadsKey, queryFn: listThreads });
+  const isDraft = threadId === "new" || threadId === undefined;
+  const isValidThreadId = Boolean(threadId && threadId !== "new" && /^[0-9a-f-]{36}$/i.test(threadId));
+  const activeThreadId = isValidThreadId && threadId ? threadId : null;
+
+  useQuery({ queryKey: threadsKey, queryFn: listThreads });
   const { data: credits } = useQuery({ queryKey: creditsKey, queryFn: fetchCredits });
-
-  const autoCreate = useMutation({
-    mutationFn: createThread,
-    onSuccess: (t) => {
-      qc.invalidateQueries({ queryKey: threadsKey });
-      setActiveThreadId(t.id);
-      autoCreating.current = false;
-    },
-    onError: () => {
-      autoCreating.current = false;
-    },
-  });
-
   useEffect(() => {
-    if (!threads) return;
-    const stillExists = activeThreadId && threads.some((t) => t.id === activeThreadId);
-    if (stillExists) return;
-    if (threads.length > 0) {
-      setActiveThreadId(threads[0].id);
-    } else if (!autoCreating.current) {
-      autoCreating.current = true;
-      autoCreate.mutate();
+    if (threadId && threadId !== "new" && !isValidThreadId) {
+      navigate("/chat/new", { replace: true });
     }
-  }, [threads, activeThreadId, autoCreate]);
+  }, [isValidThreadId, navigate, threadId]);
+
+  useQuery({
+    queryKey: ["thread", threadId],
+    queryFn: async () => {
+      if (!isValidThreadId) return null;
+      const r = await apiFetch(`/api/threads/${threadId}`);
+      if (!r.ok) {
+        if (r.status === 404) {
+          navigate("/chat/new", { replace: true });
+          return null;
+        }
+        throw new Error("加载会话失败");
+      }
+      return r.json();
+    },
+    enabled: isValidThreadId,
+  });
 
   async function onLogout() {
     await logout();
     navigate("/login", { replace: true });
+  }
+
+  function onThreadSelect(id: string) {
+    pendingMessageRef.current = null;
+    if (id) navigate(`/chat/${id}`);
+    else navigate("/chat/new");
+  }
+
+  async function onFirstSend(message: string) {
+    if (createLockRef.current) return;
+    createLockRef.current = true;
+    setIsCreatingThread(true);
+    setCreateError(null);
+
+    try {
+      const r = await apiFetch("/api/threads/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) throw new Error("创建会话失败");
+
+      const thread = (await r.json()) as ThreadT;
+      pendingMessageRef.current = message;
+      await qc.invalidateQueries({ queryKey: threadsKey });
+      navigate(`/chat/${thread.id}`, { replace: true });
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "创建会话失败");
+    } finally {
+      createLockRef.current = false;
+      setIsCreatingThread(false);
+    }
   }
 
   return (
@@ -85,7 +112,7 @@ export default function ChatPage() {
       <ThreadListSidebar
         activeThreadId={activeThreadId}
         activePanel={activePanel}
-        onSelect={(id) => setActiveThreadId(id || null)}
+        onSelect={onThreadSelect}
         onPanelChange={setActivePanel}
       />
       <main className="flex min-w-0 flex-1 flex-col">
@@ -122,20 +149,28 @@ export default function ChatPage() {
         <div className="min-h-0 flex-1 animate-fade-up" key={activePanel}>
           {activePanel === "chat" && (
             <>
-              {activeThreadId ? (
+              {!isDraft && isValidThreadId ? (
                 <RuntimeProvider
-                  key={activeThreadId}
-                  threadId={activeThreadId}
+                  key={threadId}
+                  threadId={threadId}
                   onSendResponse={(status) => setCreditNotice(status === 402)}
                   onFinish={() => {
+                    pendingMessageRef.current = null;
                     qc.invalidateQueries({ queryKey: creditsKey });
                   }}
+                  initialMessage={pendingMessageRef.current}
                 >
                   <Thread />
                 </RuntimeProvider>
+              ) : isDraft ? (
+                <DraftThreadComposer
+                  isCreating={isCreatingThread}
+                  error={createError}
+                  onSend={(message) => void onFirstSend(message)}
+                />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  正在准备会话…
+                  正在加载会话…
                 </div>
               )}
             </>

@@ -21,16 +21,6 @@ async function listThreads(): Promise<Thread[]> {
   return r.json();
 }
 
-async function createThread(): Promise<Thread> {
-  const r = await apiFetch("/api/threads/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-  if (!r.ok) throw new Error("新建会话失败");
-  return r.json();
-}
-
 async function renameThread(id: string, title: string): Promise<Thread> {
   const r = await apiFetch(`/api/threads/${id}`, {
     method: "PATCH",
@@ -75,15 +65,6 @@ export function ThreadListSidebar({
     queryFn: listThreads,
   });
 
-  const create = useMutation({
-    mutationFn: createThread,
-    onSuccess: (t) => {
-      qc.invalidateQueries({ queryKey: threadsKey });
-      onSelect(t.id);
-      onPanelChange("chat");
-    },
-  });
-
   const rename = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => renameThread(id, title),
     onSuccess: () => qc.invalidateQueries({ queryKey: threadsKey }),
@@ -93,7 +74,10 @@ export function ThreadListSidebar({
     mutationFn: deleteThread,
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: threadsKey });
-      if (id === activeThreadId) onSelect("");
+      if (id === activeThreadId) {
+        onSelect("");
+        onPanelChange("chat");
+      }
     },
   });
 
@@ -168,8 +152,11 @@ export function ThreadListSidebar({
         </span>
         <button
           type="button"
-          onClick={() => create.mutate()}
-          disabled={create.isPending}
+          aria-label="新对话"
+          onClick={() => {
+            onSelect("");
+            onPanelChange("chat");
+          }}
           className="cursor-pointer rounded-md p-1 text-sidebar-foreground/50 transition-colors duration-150 hover:bg-sidebar-accent hover:text-primary"
         >
           <Plus className="size-3.5" />

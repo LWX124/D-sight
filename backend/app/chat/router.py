@@ -85,6 +85,8 @@ async def chat(
         except service.InsufficientCredits:
             raise HTTPException(402, "积分不足")
     input_messages, first_text = _extract_inputs(request)
+    if any(isinstance(message, HumanMessage) for message in input_messages):
+        thread.last_message_at = datetime.now(UTC)
     if thread.title == "新对话" and first_text:
         thread.title = first_text[:TITLE_MAX]
     await db.commit()
@@ -94,6 +96,21 @@ async def chat(
     from app.skills.materialize import load_installed_skills
 
     skill_rows = await load_installed_skills(db, user.id)
+
+    # Skill Router 动态规划：按用户首条消息意图选择相关 capabilities
+    route_plan = None
+    try:
+        from app.agent.build import make_router_llm
+        from app.agent.capability_registry import load_user_capabilities
+        from app.agent.router import CapabilityRouter
+
+        caps = await load_user_capabilities(db, user.id)
+        if caps and first_text:
+            router = CapabilityRouter(llm=make_router_llm(), db=db)
+            route_plan = await router.route(first_text, caps)
+    except Exception as _re:
+        logger.warning("CapabilityRouter 失败，降级全量加载: %s", _re)
+
     mounted: list[uuid.UUID] = []
     for x in (request.mounted_kb_ids or []):
         try:
@@ -101,7 +118,8 @@ async def chat(
         except ValueError:
             pass
     agent = build_agent(
-        thread_id, checkpointer, skill_rows=skill_rows, kb_ids=mounted, user_id=user.id
+        thread_id, checkpointer, skill_rows=skill_rows, kb_ids=mounted,
+        user_id=user.id, route_plan=route_plan,
     )
 
     async def run_callback(controller: RunController):

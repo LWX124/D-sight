@@ -12,6 +12,7 @@ from app.fund_arb.fetchers import (
     fetch_fx_mid,
     fetch_lbma_gold_pm,
     fetch_nav_history,
+    fetch_realtime_prices,
 )
 
 # 真实抓包 2026-07-20（字段下标已校准）
@@ -151,3 +152,34 @@ async def test_fetch_lbma_gold_pm_preserves_fixing_date():
         DatedPrice(date=dt.date(2026, 7, 23), price=4044.9),
         DatedPrice(date=dt.date(2026, 7, 24), price=4067.3),
     ]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_realtime_prices_routes_csi_indexes_by_em():
+    """新浪不支持的指数代码必须经东财兜底，且按 secid 前缀正确路由：
+    sh000xxx → 1.（上证指数），sh9xxxxx → 2.（中证指数），不再走新浪→warning。"""
+    # sh000922 走 1. 前缀，有数据
+    respx.get("https://push2.eastmoney.com/api/qt/stock/get").mock(
+        side_effect=lambda request, **kw: (
+            Response(200, json={"data": {"f43": 55191200}})
+            if "secid=1.000922" in str(request.url)
+            else Response(200, json={"data": None})
+        )
+    )
+    respx.get("https://push2his.eastmoney.com/api/qt/stock/kline/get").mock(
+        return_value=Response(200, json={"data": {"klines": []}})
+    )
+    got = await fetch_realtime_prices(["sh000922"])
+    assert got["sh000922"] == pytest.approx(551912.00)  # f43=55191200 / 100
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_realtime_prices_routes_unsupported_lof_via_tencent():
+    """新浪返回空的部分 LOF 由腾讯兜底。"""
+    respx.get("https://qt.gtimg.cn/q=sz161604").mock(
+        return_value=Response(200, text='v_sz161604="名称~1.23~...~1.23~"')
+    )
+    got = await fetch_realtime_prices(["sz161604"])
+    assert got["sz161604"] == pytest.approx(1.23)

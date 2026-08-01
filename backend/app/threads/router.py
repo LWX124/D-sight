@@ -16,7 +16,13 @@ router = APIRouter(prefix="/api/threads", tags=["threads"])
 
 
 def _out(t: Thread) -> ThreadOut:
-    return ThreadOut(id=str(t.id), title=t.title, created_at=t.created_at, updated_at=t.updated_at)
+    return ThreadOut(
+        id=str(t.id),
+        title=t.title,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
+        last_message_at=t.last_message_at,
+    )
 
 
 async def _owned_thread(db: AsyncSession, user: User, thread_id: str) -> Thread:
@@ -54,9 +60,22 @@ async def list_threads(
             Thread.deleted_at.is_(None),
             Thread.type == "chat",
         )
-        .order_by(Thread.updated_at.desc())
+        .order_by(
+            Thread.last_message_at.desc(),
+            Thread.created_at.desc(),
+            Thread.id.desc(),
+        )
     )
     return [_out(t) for t in rows]
+
+
+@router.get("/{thread_id}")
+async def get_thread(
+    thread_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ThreadOut:
+    return _out(await _owned_thread(db, user, thread_id))
 
 
 @router.get("/{thread_id}/messages")
