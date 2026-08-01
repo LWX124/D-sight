@@ -41,7 +41,21 @@ async def test_thread_crud_flow(client, db_session):
     assert resp.json() == []
 
 
-async def test_thread_isolation_between_users(client, db_session):
+async def test_thread_detail_is_owned(client, db_session):
+    headers_a = await _auth_headers(client, db_session, "th-detail-a@test.dev")
+    headers_b = await _auth_headers(client, db_session, "th-detail-b@test.dev")
+    created = (await client.post("/api/threads/", json={}, headers=headers_a)).json()
+    tid = created["id"]
+
+    resp = await client.get(f"/api/threads/{tid}", headers=headers_a)
+    assert resp.status_code == 200
+    assert resp.json() == created
+
+    assert (await client.get(f"/api/threads/{tid}", headers=headers_b)).status_code == 404
+    assert (await client.get("/api/threads/not-a-uuid", headers=headers_a)).status_code == 404
+
+
+
     headers_a = await _auth_headers(client, db_session, "th-a@test.dev")
     headers_b = await _auth_headers(client, db_session, "th-b@test.dev")
 

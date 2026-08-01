@@ -69,6 +69,15 @@ async def list_threads(
     return [_out(t) for t in rows]
 
 
+@router.get("/{thread_id}")
+async def get_thread(
+    thread_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ThreadOut:
+    return _out(await _owned_thread(db, user, thread_id))
+
+
 @router.get("/{thread_id}/messages")
 async def get_thread_messages(
     thread_id: str,
