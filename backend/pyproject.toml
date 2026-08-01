@@ -16,6 +16,11 @@ dependencies = [
     "fastapi>=0.139.0",
     "langchain-deepseek>=1.1.0",
     "langgraph-checkpoint-postgres>=3.1.0",
+    # langgraph-checkpoint-postgres 传递依赖纯 Python 的 psycopg 元包，但 uv 不会
+    # 自动选 binary 实现；本机又无系统 libpq，导致 import 时 c/binary/python 三种
+    # pq 后端皆不可用（startup 报 "no pq wrapper available"）。显式带 [binary] extra
+    # 让其自带 libpq wheel，开箱即用。
+    "psycopg[binary]>=3.2.0",
     "pgvector>=0.5.0",
     "pydantic-settings>=2.14.2",
     "pydantic[email]>=2.13.4",
