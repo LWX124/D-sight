@@ -27,7 +27,10 @@ vi.mock("@/chat/RuntimeProvider", () => ({
   ),
 }));
 
-vi.mock("@/chat/Thread", () => ({ Thread: () => <div>会话内容</div> }));
+vi.mock("@/chat/Thread", () => ({
+  Thread: () => <div>会话内容</div>,
+  DraftThreadComposer: () => <div>新建会话后开始对话</div>,
+}));
 vi.mock("@/chat/KbMountSelector", () => ({ KbMountSelector: () => null }));
 vi.mock("@/lib/credits", () => ({ creditsKey: ["credits"], fetchCredits: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/panels/NewsPanel", () => ({ default: () => null }));

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Zap, Search, BarChart2, ChevronLeft, Trash2 } from "lucide-react";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
@@ -60,7 +60,7 @@ function NewsAssistantInner({
     const text = context
       ? `以下是相关新闻：\n\n${context}\n\n---\n${prompt}`
       : prompt;
-    runtime.thread.composer.setInput(text);
+    runtime.thread.composer.setText(text);
     runtime.thread.composer.send();
     setShowDeepAnalysis(false);
   };
@@ -72,7 +72,7 @@ function NewsAssistantInner({
       const after = new Date(Date.now() - 3600_000).toISOString();
       const items = await fetchNews({ after, limit: 50 });
       if (items.length === 0) {
-        runtime.thread.composer.setInput("（最近1小时暂无快讯）");
+        runtime.thread.composer.setText("（最近1小时暂无快讯）");
         runtime.thread.composer.send();
         return;
       }
@@ -89,7 +89,7 @@ function NewsAssistantInner({
     try {
       const items = await fetchNews({ keyword: keyword.trim(), limit: 20 });
       if (items.length === 0) {
-        runtime.thread.composer.setInput(`（未找到含"${keyword}"的新闻，可尝试其他关键词）`);
+        runtime.thread.composer.setText(`（未找到含"${keyword}"的新闻，可尝试其他关键词）`);
         runtime.thread.composer.send();
         return;
       }

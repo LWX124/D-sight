@@ -4,7 +4,7 @@
 //  3) body 携带 threadId（由 props 传入；threadId 变化时上层用 key 重建 runtime）
 //  4) 无前端工具（去掉 toolkit/Tools 相关代码）
 // converter 与 LangChainMessageConverter 保留官方语义：state.messages + pendingCommands 乐观更新。
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
   useAssistantTransportRuntime,
@@ -30,11 +30,13 @@ export function RuntimeProvider({
   children,
   onSendResponse,
   onFinish,
+  initialMessage,
 }: {
   threadId: string;
   children: ReactNode;
   onSendResponse?: (status: number) => void;
   onFinish?: () => void;
+  initialMessage?: string | null;
 }) {
   const [initialState, setInitialState] = useState<State | null>(null);
 
@@ -61,6 +63,7 @@ export function RuntimeProvider({
       initialState={initialState}
       onSendResponse={onSendResponse}
       onFinish={onFinish}
+      initialMessage={initialMessage}
     >
       {children}
     </RuntimeInner>
@@ -73,12 +76,14 @@ function RuntimeInner({
   children,
   onSendResponse,
   onFinish,
+  initialMessage,
 }: {
   threadId: string;
   initialState: State;
   children: ReactNode;
   onSendResponse?: (status: number) => void;
   onFinish?: () => void;
+  initialMessage?: string | null;
 }) {
   const runtime = useAssistantTransportRuntime<State>({
     initialState,
@@ -118,6 +123,15 @@ function RuntimeInner({
     // 每次发送结束（成功或失败的 finally）刷新余额徽章。
     onFinish: () => onFinish?.(),
   });
+
+  const initialMessageSentRef = useRef(false);
+  useEffect(() => {
+    if (!initialMessage || initialMessageSentRef.current) return;
+    initialMessageSentRef.current = true;
+    const composer = runtime.thread.composer;
+    composer.setText(initialMessage);
+    composer.send();
+  }, [initialMessage, runtime]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

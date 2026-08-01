@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
-import { Thread } from "@/chat/Thread";
+import { DraftThreadComposer, Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Panel, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
 import { KbMountSelector } from "@/chat/KbMountSelector";
 import { creditsKey, fetchCredits } from "@/lib/credits";
@@ -36,10 +36,14 @@ export default function ChatPage() {
   const qc = useQueryClient();
   const [activePanel, setActivePanel] = useState<Panel>("chat");
   const [creditNotice, setCreditNotice] = useState(false);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createLockRef = useRef(false);
+  const pendingMessageRef = useRef<string | null>(null);
 
   const isDraft = threadId === "new" || threadId === undefined;
   const isValidThreadId = Boolean(threadId && threadId !== "new" && /^[0-9a-f-]{36}$/i.test(threadId));
-  const activeThreadId = isValidThreadId ? threadId : null;
+  const activeThreadId = isValidThreadId && threadId ? threadId : null;
 
   useQuery({ queryKey: threadsKey, queryFn: listThreads });
   const { data: credits } = useQuery({ queryKey: creditsKey, queryFn: fetchCredits });
@@ -72,8 +76,35 @@ export default function ChatPage() {
   }
 
   function onThreadSelect(id: string) {
+    pendingMessageRef.current = null;
     if (id) navigate(`/chat/${id}`);
     else navigate("/chat/new");
+  }
+
+  async function onFirstSend(message: string) {
+    if (createLockRef.current) return;
+    createLockRef.current = true;
+    setIsCreatingThread(true);
+    setCreateError(null);
+
+    try {
+      const r = await apiFetch("/api/threads/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) throw new Error("创建会话失败");
+
+      const thread = (await r.json()) as ThreadT;
+      pendingMessageRef.current = message;
+      await qc.invalidateQueries({ queryKey: threadsKey });
+      navigate(`/chat/${thread.id}`, { replace: true });
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "创建会话失败");
+    } finally {
+      createLockRef.current = false;
+      setIsCreatingThread(false);
+    }
   }
 
   return (
@@ -124,14 +155,22 @@ export default function ChatPage() {
                   threadId={threadId}
                   onSendResponse={(status) => setCreditNotice(status === 402)}
                   onFinish={() => {
+                    pendingMessageRef.current = null;
                     qc.invalidateQueries({ queryKey: creditsKey });
                   }}
+                  initialMessage={pendingMessageRef.current}
                 >
                   <Thread />
                 </RuntimeProvider>
+              ) : isDraft ? (
+                <DraftThreadComposer
+                  isCreating={isCreatingThread}
+                  error={createError}
+                  onSend={(message) => void onFirstSend(message)}
+                />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  {isDraft ? "新建会话后开始对话" : "正在加载会话…"}
+                  正在加载会话…
                 </div>
               )}
             </>
