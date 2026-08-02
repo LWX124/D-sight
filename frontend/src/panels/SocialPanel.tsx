@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Search, Send, X } from "lucide-react";
+import { Library, RefreshCw, Search, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AddToKbDialog from "@/components/AddToKbDialog";
 import {
   type Article,
   type Credential,
@@ -64,6 +65,11 @@ function WechatTab() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 自动拉起二维码只触发一次，避免扫码失败后循环重拉
   const autoTriggeredRef = useRef(false);
+  const [addTarget, setAddTarget] = useState<
+    | { mode: "items"; items: { source_type: string; source_ref_id: string }[] }
+    | { mode: "source"; source: { source_type: string; source_ref_id: string; display_name: string } }
+    | null
+  >(null);
 
   const activeCreds = creds.filter((c) => c.status === "active");
   const expiredCreds = creds.filter((c) => c.status !== "active");
@@ -239,7 +245,7 @@ function WechatTab() {
           ) : (
             <ul className="space-y-0.5">
               {subs.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="group relative">
                   <button
                     type="button"
                     onClick={() => openAccount(s.account_id)}
@@ -262,6 +268,26 @@ function WechatTab() {
                       </span>
                     )}
                     <span className="truncate">{s.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`social-add-kb-account-${s.account_id}`}
+                    aria-label="整号加入知识库"
+                    title="整号加入知识库"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAddTarget({
+                        mode: "source",
+                        source: {
+                          source_type: "wechat_account",
+                          source_ref_id: s.account_id,
+                          display_name: s.name,
+                        },
+                      });
+                    }}
+                    className="absolute right-1.5 top-1.5 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                  >
+                    <Library className="size-3.5" />
                   </button>
                 </li>
               ))}
@@ -331,7 +357,7 @@ function WechatTab() {
               ) : (
                 <ul className={`grid gap-2.5 ${reading ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
                   {articles.map((art) => (
-                    <li key={art.id}>
+                    <li key={art.id} className="group relative">
                       <button
                         type="button"
                         onClick={() => openArticle(art.id)}
@@ -357,6 +383,22 @@ function WechatTab() {
                           />
                         )}
                       </button>
+                      <button
+                        type="button"
+                        data-testid={`social-add-kb-${art.id}`}
+                        aria-label="加入知识库"
+                        title="加入知识库"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddTarget({
+                            mode: "items",
+                            items: [{ source_type: "wechat_article", source_ref_id: art.id }],
+                          });
+                        }}
+                        className="absolute right-2 top-2 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                      >
+                        <Library className="size-3.5" />
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -370,6 +412,20 @@ function WechatTab() {
               <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
                 <div className="truncate text-sm font-medium">{reading.title}</div>
                 <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    data-testid="social-add-kb-reading"
+                    onClick={() =>
+                      setAddTarget({
+                        mode: "items",
+                        items: [{ source_type: "wechat_article", source_ref_id: reading.id }],
+                      })
+                    }
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Library className="size-3.5" />
+                    加入知识库
+                  </button>
                   <a
                     href={reading.url}
                     target="_blank"
@@ -419,6 +475,16 @@ function WechatTab() {
           </div>
         </div>
       </div>
+
+      {addTarget && (
+        <AddToKbDialog
+          open
+          onClose={() => setAddTarget(null)}
+          mode={addTarget.mode}
+          items={addTarget.mode === "items" ? addTarget.items : undefined}
+          source={addTarget.mode === "source" ? addTarget.source : undefined}
+        />
+      )}
     </div>
   );
 }

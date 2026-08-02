@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Zap, Search, BarChart2, ChevronLeft, Trash2 } from "lucide-react";
+import { Zap, Search, BarChart2, ChevronLeft, Trash2, Library } from "lucide-react";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { Thread } from "@/chat/Thread";
 import { clearNewsThread, fetchNews, fetchNewsThreadId, type NewsItem } from "@/lib/news";
 import { hasStockMention, formatNewsContext } from "@/hooks/useNewsSelection";
 import { useAssistantRuntime } from "@assistant-ui/react";
+import AddToKbDialog from "@/components/AddToKbDialog";
 
 interface NewsAssistantProps {
   selectedItems: NewsItem[];
@@ -53,6 +54,7 @@ function NewsAssistantInner({
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const hasStock = hasStockMention(selectedItems);
 
   // 发送带 context 的消息
@@ -190,6 +192,15 @@ function NewsAssistantInner({
               className="rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent">
               时间线
             </button>
+            <button
+              type="button"
+              data-testid="news-add-kb"
+              onClick={() => setAddOpen(true)}
+              className="flex items-center gap-0.5 rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent"
+            >
+              <Library className="size-3" />
+              加入知识库
+            </button>
             {hasStock && (
               <button type="button" onClick={handleStockAnalysis}
                 className="flex items-center gap-0.5 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 hover:bg-amber-500/20">
@@ -215,6 +226,15 @@ function NewsAssistantInner({
           <Thread />
         )}
       </div>
+
+      {addOpen && (
+        <AddToKbDialog
+          open
+          onClose={() => setAddOpen(false)}
+          mode="items"
+          items={selectedItems.map((i) => ({ source_type: "news_item", source_ref_id: i.id }))}
+        />
+      )}
     </div>
   );
 }
