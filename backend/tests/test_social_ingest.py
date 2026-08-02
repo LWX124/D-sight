@@ -49,8 +49,8 @@ async def test_ingest_dedup(db_session):
     async with http:
         added1 = await ingest_account(db_session, acc, _cred(), http)
         added2 = await ingest_account(db_session, acc, _cred(), http)  # 同样两篇
-    assert added1 == 2
-    assert added2 == 0
+    assert len(added1) == 2
+    assert added2 == []
     total = await db_session.scalar(
         select(func.count()).select_from(WechatArticle).where(WechatArticle.account_id == acc.id)
     )
