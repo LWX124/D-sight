@@ -38,12 +38,16 @@ export function RuntimeProvider({
   onSendResponse,
   onFinish,
   initialMessage,
+  mountedKbIds,
 }: {
   threadId: string;
   children: ReactNode;
   onSendResponse?: (status: number) => void;
   onFinish?: () => void;
   initialMessage?: string | null;
+  // 传入时覆盖全局挂载 store。KB 面板的单库对话用它锁定为当前库，
+  // 否则用户在聊天面板勾选的库会漏进 KB 对话。
+  mountedKbIds?: string[];
 }) {
   const [initialState, setInitialState] = useState<State | null>(null);
 
@@ -71,6 +75,7 @@ export function RuntimeProvider({
       onSendResponse={onSendResponse}
       onFinish={onFinish}
       initialMessage={initialMessage}
+      mountedKbIds={mountedKbIds}
     >
       {children}
     </RuntimeInner>
@@ -84,6 +89,7 @@ function RuntimeInner({
   onSendResponse,
   onFinish,
   initialMessage,
+  mountedKbIds,
 }: {
   threadId: string;
   initialState: State;
@@ -91,6 +97,7 @@ function RuntimeInner({
   onSendResponse?: (status: number) => void;
   onFinish?: () => void;
   initialMessage?: string | null;
+  mountedKbIds?: string[];
 }) {
   const runtime = useAssistantTransportRuntime<State>({
     initialState,
@@ -123,7 +130,8 @@ function RuntimeInner({
     }),
     // 适配 3：body 携带 threadId + 当前挂载的知识库 id。body 用函数形式，
     // 每次发送时从 store 读取最新选中集合，随每条消息发送 mountedKbIds。
-    body: () => Promise.resolve({ threadId, mountedKbIds: getMountedKbIds() }),
+    // mountedKbIds 显式传入时（KB 面板单库对话）覆盖全局 store。
+    body: () => Promise.resolve({ threadId, mountedKbIds: mountedKbIds ?? getMountedKbIds() }),
     // 积分：onResponse 在 !ok 抛错之前拿到原始 Response（见 useAssistantTransportRuntime
     // 源码 options.onResponse?.(response) 早于 throw），故用状态码判 402 最稳，胜过解析错误消息。
     onResponse: (response) => onSendResponse?.(response.status),
