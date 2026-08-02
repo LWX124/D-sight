@@ -28,6 +28,8 @@
 - 信源级订阅快讯（整个 sina_live 持续入库）
 - `SocialPanel` 底部「向 AI 提问当前文章」占位框的实现
 - 全局跨知识库的内容去重（见「关键决策」）
+- 订阅的共享知识库进 KB 面板浏览/对话。本期 KB 面板仅自有库（新端点均走
+  `_owned_kb`）；订阅共享库照旧走聊天面板的挂载检索
 
 ## 关键决策
 
@@ -97,6 +99,9 @@ WHERE content_hash = :h AND embedding_model = :m LIMIT 1
 
 存储上文本副本仍各存一份（几 KB 的事），省下的是花钱的 API 调用。
 
+迁移回填存量行：`content_hash` 由 `content` 计算得出；`embedding_model` 统一填
+当前配置的模型名（存量向量即是该模型算的），之后两列改 NOT NULL。
+
 ### 扩展 `threads`
 
 ```python
@@ -112,32 +117,37 @@ ref_id: uuid | None   # type="kb" 时指向 kb.id
 
 ### 中间表示（`app/kb/sources.py`）
 
-```python
-@dataclass
-class SourceItem:
-    source_type: str          # "wechat_article" / "news_item" / ...
-    source_ref_id: str
-    title: str
-    text: str                 # 已就绪的纯文本正文
-    source_url: str | None
-    published_at: datetime | None
+每种来源实现两个函数，职责按「快 / 慢」切开：
 
-async def resolve_wechat_article(db, article_id, http) -> SourceItem   # 正文缺失时补拉
-async def resolve_news_item(db, item_id) -> SourceItem                 # 直接读，无外部请求
+```python
+# 快：只读本地库，供请求内建文档行用。返回 title/source_url/published_at
+async def describe_wechat_article(db, article_id) -> SourceMeta
+async def describe_news_item(db, item_id) -> SourceMeta
+
+# 慢：产出纯文本正文，只在后台任务里调（公众号可能要走凭证池补拉）
+async def resolve_wechat_article_text(db, article_id, http) -> str
+async def resolve_news_item_text(db, item_id) -> str      # 直接读，无外部请求
 ```
 
 `title` 的取值：公众号用 `WechatArticle.title`；快讯的 `NewsItem.title` 可空，为空时
-取 `content` 前 40 字加省略号。`text` 为空或纯空白时不建文档，直接返回错误
-（手动加入）或跳过（订阅回填）——空文档切不出 chunk，进库只会污染索引。
+取 `content` 前 40 字加省略号。两者都在本地库里，describe 阶段零外部请求。
 
 ### 入库入口
 
 ```python
-async def add_source_item(db, kb_id, item, kb_source_id=None) -> Literal["added", "duplicate"]
+async def add_source_item(db, kb_id, source_type, source_ref_id,
+                          kb_source_id=None) -> Literal["added", "duplicate"]
 ```
 
-先按 `(kb_id, source_type, source_ref_id)` 查重，命中返回 `duplicate`（不是错误，
-前端提示「已在库中」）；否则建 `KbDocument(status="pending")` 并把切片任务丢后台。
+请求内只做三件事：按 `(kb_id, source_type, source_ref_id)` 查重（命中返回
+`duplicate`——不是错误，前端提示「已在库中」）→ describe 建
+`KbDocument(status="pending")` → 把 resolve+切片任务丢后台。**正文抓取一律在后台**：
+`/items` 批量加公众号文章时若在请求内串行补拉正文（还带限流间隔），请求必超时；
+放后台后失败也自然落在 `doc.status="failed"`，与失败模式表一致。
+
+正文 resolve 出来为空或纯空白时标 `failed`（error 注明空正文）——空文档切不出
+chunk，进库只会污染索引。
+
 并发插入靠唯一约束兜底：捕 `IntegrityError` 转成 `duplicate`，不依赖「先查后插」
 ——那中间有竞态窗口。
 
@@ -161,7 +171,9 @@ async def ingest_document(document_id, filename, raw)   # parse_document → ing
 进程重启丢了任务，下次 poll 或手动「同步」补上，不会产生重复。
 
 **增量**：在 `poll_all_subscriptions` 中 `ingest_account` 返回后挂钩子——查哪些
-`KbSource` 订阅了该 account，为本轮新增文章 resolve + 入库。
+`KbSource` 订阅了该 account，为本轮新增文章逐篇 `add_source_item`。前置改动：
+`ingest_account` 现在只返回新增数量（int），需改为返回新增文章 id 列表，调用方
+`sum(len(...))` 保持原计数行为。
 
 ### 限速
 
@@ -182,8 +194,10 @@ kb_max_documents_per_kb: int = 2000
 kb_max_sources_per_user: int = 10
 ```
 
-触顶时：手动加入返回 4xx 并带明确文案；订阅自动入库则把 `KbSource.status` 置为
-`"limited"` 停止入库，并在知识库面板上显示可见提示，不静默丢弃。
+文档数上限按库统计，**上传文档也计入**——上限管的是库的规模，不是来源。
+
+触顶时：手动加入/上传返回 4xx 并带明确文案；订阅自动入库则把 `KbSource.status`
+置为 `"limited"` 停止入库，并在知识库面板上显示可见提示，不静默丢弃。
 
 ## API
 
@@ -202,10 +216,14 @@ GET    /api/kb/{kb_id}/thread               取/建常驻会话             ← 
 
 `POST /items` 的请求体是 `{items: [{source_type, source_ref_id}, ...]}`，返回
 `{added: n, duplicate: n, failed: [{source_ref_id, error}]}`，前端据此提示
-「3 条已加入，1 条已在库中」。单条失败不影响同批其余条目。
+「3 条已加入，1 条已在库中」。单条失败不影响同批其余条目。`failed` 只覆盖请求阶段
+的错误（源不存在等）；正文抓取/切片失败发生在后台，体现为文档 `status="failed"`。
+
+`POST /items` 是纯本地操作（describe + 建行），响应即时；正文抓取和切片在后台，
+前端靠文档列表轮询看到 pending → ready 的推进（`DocList` 已有轮询逻辑可沿用）。
 
 `GET /{kb_id}/thread` 照抄 `/api/news/thread` 的实现，但按 `(user_id, type="kb",
-ref_id=kb_id)` 查找/创建。
+ref_id=kb_id)` 查找/创建。所有新端点沿用 `_owned_kb` 鉴权（仅自有库，见非目标）。
 
 路径统一为 `/{kb_id}/xxx/{id}` 三段式，不引入 `/api/kb/documents/{id}` 这种与
 `/{kb_id}` 同层的路由——`router.py` 里关于 `/subscribed` 被当成 `kb_id` 吃掉的注释
@@ -248,8 +266,13 @@ KbPanel.tsx            容器：布局 + 选中态 + 折叠态
 ├─ KbList.tsx          库列表、新建、分享/订阅
 ├─ KbDocumentIndex.tsx 内容索引：按 published_at 倒序，来源图标，删除
 ├─ KbDocumentDetail.tsx 详情：标题/来源/时间/原文链接 + 入库文本正文
-└─ KbAssistant.tsx     可折叠对话栏，RuntimeProvider + 锁定 mountedKbIds
+└─ KbAssistant.tsx     可折叠对话栏，RuntimeProvider + 锁定挂载为当前库
 ```
+
+锁定挂载的机制：`RuntimeProvider` 发消息时从全局 zustand store 读
+`getMountedKbIds()`（`kbMount.ts`），KB 面板若走同一路径，用户在聊天面板勾选的库
+会漏进 KB 对话。改法：`RuntimeProvider` 加可选 prop `mountedKbIds` 覆盖全局
+store，`KbAssistant` 传 `[kbId]`；不传时行为不变。
 
 详情区展示**入库时的文本快照**，不回源重抓——检索命中的就是这份文本，展示和检索
 必须一致，否则用户会看到「AI 引用的内容和我看到的不一样」。原文链接单独给一个 `↗`。
