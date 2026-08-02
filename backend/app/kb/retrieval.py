@@ -25,7 +25,7 @@ async def search_chunks(db, kb_ids, query, top_k=20, top_n=5) -> list[dict]:
         return []
     qvec = (await get_embedding_provider().embed([query]))[0]
     rows = (await db.execute(
-        select(KbChunk, KbDocument.filename)
+        select(KbChunk, KbDocument.title)
         .join(KbDocument, KbDocument.id == KbChunk.document_id)
         .where(KbChunk.kb_id.in_(kb_ids))
         .order_by(KbChunk.embedding.cosine_distance(qvec)).limit(top_k)
@@ -36,7 +36,9 @@ async def search_chunks(db, kb_ids, query, top_k=20, top_n=5) -> list[dict]:
     ranked = await get_reranker().rerank(query, docs, top_n)
     out = []
     for idx, score in ranked:
-        chunk, filename = rows[idx]
+        chunk, title = rows[idx]
+        # 键名保持 filename：agent/tools/kb.py 与既有测试都读这个键，
+        # 上传文档的 title 本就等于文件名，语义不变。
         out.append({"content": chunk.content, "kb_id": str(chunk.kb_id),
-                    "document_id": str(chunk.document_id), "filename": filename, "score": score})
+                    "document_id": str(chunk.document_id), "filename": title, "score": score})
     return out
