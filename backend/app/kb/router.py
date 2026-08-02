@@ -275,6 +275,31 @@ async def list_sources(
     return [_source_out(s) for s in rows]
 
 
+@router.get("/{kb_id}/thread")
+async def get_kb_thread(
+    kb_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """取/建该库的常驻会话。照 /api/news/thread 的做法，按 ref_id 区分到库。
+
+    type="kb" 使其不进左侧全局会话列表（见 threads/router.py 的 list_threads）。
+    """
+    from app.threads.models import Thread
+
+    kb = await _owned_kb(db, user, kb_id)
+    thread = await db.scalar(
+        select(Thread).where(
+            Thread.user_id == user.id, Thread.type == "kb",
+            Thread.ref_id == kb.id, Thread.deleted_at.is_(None),
+        )
+    )
+    if thread is None:
+        thread = Thread(user_id=user.id, title=f"{kb.name} 对话", type="kb", ref_id=kb.id)
+        db.add(thread)
+        await db.commit()
+        await db.refresh(thread)
+    return {"thread_id": str(thread.id)}
+
+
 @router.delete("/{kb_id}/sources/{source_id}")
 async def delete_source(
     kb_id: str, source_id: str, purge: bool = False,
