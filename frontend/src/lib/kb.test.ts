@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import * as api from "./api";
-import { createKb, fetchKbs, fetchSubscribed, subscribeKb, uploadDoc } from "./kb";
+import {
+  addKbItems,
+  addKbSource,
+  createKb,
+  deleteDoc,
+  deleteKbSource,
+  fetchDoc,
+  fetchDocs,
+  fetchKbSources,
+  fetchKbThreadId,
+  fetchKbs,
+  fetchSubscribed,
+  subscribeKb,
+  uploadDoc,
+} from "./kb";
 
 describe("kb api", () => {
   it("parses list", async () => {
@@ -54,5 +68,107 @@ describe("kb api", () => {
     );
     const items = await fetchSubscribed();
     expect(items[0].id).toBe("s1");
+  });
+
+  it("fetchDocs 带分页参数并解析新字段", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(
+        JSON.stringify([{
+          id: "d1", title: "某篇文章", filename: null, status: "ready", chunk_count: 3,
+          error: null, source_type: "wechat_article",
+          source_url: "https://mp.weixin.qq.com/s/x", published_at: "2026-07-01T00:00:00Z",
+        }]),
+        { status: 200 },
+      ),
+    );
+    const docs = await fetchDocs("k1", { limit: 20, offset: 40 });
+    expect(docs[0].title).toBe("某篇文章");
+    expect(docs[0].filename).toBeNull();
+    expect(docs[0].source_type).toBe("wechat_article");
+    expect(spy.mock.calls[0][0]).toBe("/api/kb/k1/documents?limit=20&offset=40");
+  });
+
+  it("fetchDoc 返回入库文本快照", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        id: "d1", title: "t", filename: null, status: "ready", chunk_count: 1, error: null,
+        source_type: "news_item", source_url: null, published_at: null, text: "正文快照",
+      }), { status: 200 }),
+    );
+    const d = await fetchDoc("k1", "d1");
+    expect(d.text).toBe("正文快照");
+    expect(spy.mock.calls[0][0]).toBe("/api/kb/k1/documents/d1");
+  });
+
+  it("deleteDoc 发 DELETE", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    await deleteDoc("k1", "d1");
+    expect(spy).toHaveBeenCalledWith("/api/kb/k1/documents/d1", { method: "DELETE" });
+  });
+
+  it("addKbItems 提交数组并解析结果", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        added: 2, duplicate: 1, failed: [{ source_ref_id: "x", error: "快讯不存在" }],
+      }), { status: 200 }),
+    );
+    const r = await addKbItems("k1", [
+      { source_type: "news_item", source_ref_id: "a" },
+      { source_type: "news_item", source_ref_id: "b" },
+    ]);
+    expect(r.added).toBe(2);
+    expect(r.duplicate).toBe(1);
+    expect(r.failed[0].error).toBe("快讯不存在");
+    const [path, init] = spy.mock.calls[0];
+    expect(path).toBe("/api/kb/k1/items");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string).items).toHaveLength(2);
+  });
+
+  it("addKbSource 提交订阅", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        id: "s1", source_type: "wechat_account", source_ref_id: "acc-1",
+        display_name: "财经号", status: "pending", enabled: true, error: null,
+        last_synced_at: null,
+      }), { status: 200 }),
+    );
+    const s = await addKbSource("k1", {
+      source_type: "wechat_account", source_ref_id: "acc-1", display_name: "财经号",
+    });
+    expect(s.status).toBe("pending");
+    expect(spy.mock.calls[0][0]).toBe("/api/kb/k1/sources");
+  });
+
+  it("deleteKbSource 默认不 purge，显式传 true 才带参数", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    await deleteKbSource("k1", "s1");
+    expect(spy).toHaveBeenCalledWith("/api/kb/k1/sources/s1?purge=false", { method: "DELETE" });
+    await deleteKbSource("k1", "s1", true);
+    expect(spy).toHaveBeenLastCalledWith("/api/kb/k1/sources/s1?purge=true", { method: "DELETE" });
+  });
+
+  it("fetchKbThreadId 取常驻会话 id", async () => {
+    vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({ thread_id: "t-1" }), { status: 200 }),
+    );
+    expect(await fetchKbThreadId("k1")).toBe("t-1");
+  });
+
+  it("接口失败时抛错而不是静默返回空", async () => {
+    vi.spyOn(api, "apiFetch").mockResolvedValue(new Response("nope", { status: 409 }));
+    await expect(addKbItems("k1", [{ source_type: "news_item", source_ref_id: "a" }]))
+      .rejects.toThrow();
+  });
+
+  it("fetchKbSources 解析列表", async () => {
+    vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify([{
+        id: "s1", source_type: "wechat_account", source_ref_id: "a", display_name: "号",
+        status: "ready", enabled: true, error: null, last_synced_at: "2026-08-01T00:00:00Z",
+      }]), { status: 200 }),
+    );
+    const rows = await fetchKbSources("k1");
+    expect(rows[0].display_name).toBe("号");
   });
 });
