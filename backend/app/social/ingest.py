@@ -1,4 +1,5 @@
 import datetime as dt
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,12 +21,19 @@ async def get_or_create_account(
     return acc
 
 
-async def ingest_account(db: AsyncSession, account: WechatAccount, cred: ActiveCred, http, count: int = 20) -> int:
+async def ingest_account(
+    db: AsyncSession, account: WechatAccount, cred: ActiveCred, http, count: int = 20
+) -> list[uuid.UUID]:
+    """增量抓取该号文章，返回本轮新增文章的 id 列表。
+
+    返回 id 而非计数：KB 整号订阅的增量钩子需要知道具体是哪几篇。调用方要计数
+    直接 len()。
+    """
     from app.core.config import get_settings
 
     n = count or get_settings().social_fetch_count
     raws = await appmsg_publish(http, cred, account.fakeid, begin=0, count=n)
-    added = 0
+    new_ids: list[uuid.UUID] = []
     for raw in raws:
         exists = await db.scalar(
             select(WechatArticle.id).where(
@@ -34,13 +42,15 @@ async def ingest_account(db: AsyncSession, account: WechatAccount, cred: ActiveC
         )
         if exists is not None:
             continue
-        db.add(WechatArticle(
+        art = WechatArticle(
             account_id=account.id, external_id=raw.external_id, title=raw.title,
             digest=raw.digest, cover_url=raw.cover_url, url=raw.url, published_at=raw.published_at,
-        ))
-        added += 1
+        )
+        db.add(art)
+        await db.flush()          # 拿到自动生成的 id
+        new_ids.append(art.id)
     await db.commit()
-    return added
+    return new_ids
 
 
 async def fetch_article_content(db: AsyncSession, article: WechatArticle, http) -> str:

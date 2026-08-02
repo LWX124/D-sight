@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
+from app.kb.backfill import ingest_new_articles_for_account
 from app.social.credentials import mark_expired, pick_credential
 from app.social.ingest import ingest_account
 from app.social.models import WechatAccount, WechatSubscription
@@ -34,7 +35,14 @@ async def poll_all_subscriptions() -> int:
             try:
                 async with get_sessionmaker()() as db:
                     acc = await db.get(WechatAccount, account.id)
-                    total += await ingest_account(db, acc, cred, http)
+                    new_ids = await ingest_account(db, acc, cred, http)
+                total += len(new_ids)
+                if new_ids:
+                    # KB 整号订阅的增量入库。失败不拖累社媒 poll——两者独立关注点。
+                    try:
+                        await ingest_new_articles_for_account(account.id, new_ids)
+                    except Exception:  # noqa: BLE001
+                        _log.exception("kb incremental ingest failed for account %s", account.id)
             except SessionExpiredError:
                 async with get_sessionmaker()() as db:
                     await mark_expired(db, cred.id)

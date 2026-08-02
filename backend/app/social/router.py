@@ -1,7 +1,7 @@
 import datetime as dt
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -172,7 +172,8 @@ async def get_article(
 
 @router.post("/wechat/refresh")
 async def refresh(
-    account_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    account_id: uuid.UUID, background: BackgroundTasks,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ) -> dict:
     from app.social.ingest import ingest_account
 
@@ -184,13 +185,17 @@ async def refresh(
         raise HTTPException(404, "公众号不存在")
     try:
         async with new_mp_client() as http:
-            added = await ingest_account(db, acc, cred, http)
+            new_ids = await ingest_account(db, acc, cred, http)
     except SessionExpiredError:
         await mark_expired(db, cred.id)
         raise HTTPException(409, "凭证已失效，请重新扫码登录")
     except TransientMpError:
         raise HTTPException(503, "微信接口暂时不可用（限流），请稍后重试")
-    return {"added": added}
+    if new_ids:
+        from app.kb.backfill import ingest_new_articles_for_account
+
+        background.add_task(ingest_new_articles_for_account, acc.id, new_ids)
+    return {"added": len(new_ids)}
 
 
 def _article_out(r: WechatArticle) -> ArticleOut:
