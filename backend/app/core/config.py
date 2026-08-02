@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     kb_max_upload_mb: int = 10
+    kb_backfill_delay_seconds: float = 2.0     # 正文抓取最小间隔（前后台共用限流器）
+    kb_backfill_max_failures: int = 3          # 连续失败几篇后中止本批回填
+    kb_max_documents_per_kb: int = 2000        # 单库文档数上限（含上传），admin 豁免
+    kb_max_sources_per_user: int = 10          # 每用户订阅源总数上限，admin 豁免
+    kb_backfill_batch_limit: int = 50          # 单次回填最多处理多少篇
     news_backend: str = "fake"
     # Fernet 密钥（base64 urlsafe 32 字节）。留空则用 dev 默认（仅测试/本地）。
     social_encryption_key: str = "ZHNpZ2h0LXNvY2lhbC1kZXYtZmVybmV0LWtleS0zMmI="
