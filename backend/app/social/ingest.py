@@ -44,9 +44,13 @@ async def ingest_account(db: AsyncSession, account: WechatAccount, cred: ActiveC
 
 
 async def fetch_article_content(db: AsyncSession, article: WechatArticle, http) -> str:
+    from app.kb.ratelimit import article_fetch_slot
+
     if article.content:
         return article.content
-    text = await fetch_article_text(http, article.url)
+    # 与 KB 后台回填共用限流 slot：回填不得把前台阅读挤到超时
+    async with article_fetch_slot():
+        text = await fetch_article_text(http, article.url)
     article.content = text
     article.content_fetched_at = dt.datetime.now(dt.UTC)
     await db.commit()
