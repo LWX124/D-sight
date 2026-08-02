@@ -151,3 +151,31 @@ async def test_documents_pagination_and_ordering(client, db_session, registered_
     rest = (await client.get(f"/api/kb/{kb_id}/documents?limit=2&offset=2", headers=h)).json()
     assert len(rest) == 1
     assert {d["id"] for d in page}.isdisjoint({d["id"] for d in rest})
+
+
+@pytest.mark.asyncio
+async def test_quota_stops_batch_and_reports_remaining_as_failed(
+    client, db_session, registered_user, monkeypatch,
+):
+    """触顶后中止同批剩余条目：已加入的照数，触顶那条进 failed 带文案。
+
+    配额是花钱/占存储的闸门，这条分支一旦静默失效就没人发现，故单独钉住。
+    """
+    from app.core import config
+
+    monkeypatch.setenv("KB_MAX_DOCUMENTS_PER_KB", "2")
+    config.get_settings.cache_clear()
+    try:
+        h = _auth(registered_user)
+        kb_id = (await client.post("/api/kb", json={"name": "配额库"}, headers=h)).json()["id"]
+        items = [await _news_item(db_session, title=f"额{i}") for i in range(4)]
+
+        r = (await client.post(f"/api/kb/{kb_id}/items", headers=h, json={"items": [
+            {"source_type": "news_item", "source_ref_id": str(i.id)} for i in items]})).json()
+        # 上限 2 → 前两条进库，第三条触顶并中止，第四条根本没试
+        assert r["added"] == 2
+        assert len(r["failed"]) == 1
+        assert "2 篇文档上限" in r["failed"][0]["error"]
+        assert r["failed"][0]["source_ref_id"] == str(items[2].id)
+    finally:
+        config.get_settings.cache_clear()

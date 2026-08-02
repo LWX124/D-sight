@@ -33,13 +33,27 @@ export type AddItemsResult = {
   failed: { source_ref_id: string; error: string }[];
 };
 
+// FastAPI 的 HTTPException 序列化为 {"detail": "..."}，直接抛 r.text() 会把整个
+// JSON 串塞给用户（配额触顶的中文文案会显示成 {"detail":"该知识库已达…"}）。
+// 这里剥掉信封，与 lib/auth.ts 的做法一致。
+async function errorFrom(r: Response): Promise<Error> {
+  const raw = await r.text();
+  try {
+    const detail = JSON.parse(raw).detail;
+    if (typeof detail === "string") return new Error(detail);
+  } catch {
+    // 非 JSON（网关 502 之类）：原样透出
+  }
+  return new Error(raw || `HTTP ${r.status}`);
+}
+
 async function json<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw await errorFrom(r);
   return r.json() as Promise<T>;
 }
 
 async function ok(r: Response): Promise<void> {
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw await errorFrom(r);
 }
 
 export async function fetchKbs(): Promise<Kb[]> {

@@ -161,6 +161,29 @@ describe("kb api", () => {
       .rejects.toThrow();
   });
 
+  it("剥掉 FastAPI 的 detail 信封，只把文案给用户", async () => {
+    // 后端 HTTPException(409, "该知识库已达 2000 篇文档上限…") → {"detail":"…"}
+    vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "该知识库已达 2000 篇文档上限，请先清理或新建知识库" }), {
+        status: 409,
+      }),
+    );
+    await expect(addKbItems("k1", [{ source_type: "news_item", source_ref_id: "a" }]))
+      .rejects.toThrow("该知识库已达 2000 篇文档上限，请先清理或新建知识库");
+  });
+
+  it("非 JSON 错误响应原样透出，不吞掉", async () => {
+    vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response("502 Bad Gateway", { status: 502 }),
+    );
+    await expect(fetchDocs("k1")).rejects.toThrow("502 Bad Gateway");
+  });
+
+  it("空响应体时回落到状态码", async () => {
+    vi.spyOn(api, "apiFetch").mockResolvedValue(new Response("", { status: 500 }));
+    await expect(deleteDoc("k1", "d1")).rejects.toThrow("HTTP 500");
+  });
+
   it("fetchKbSources 解析列表", async () => {
     vi.spyOn(api, "apiFetch").mockResolvedValue(
       new Response(JSON.stringify([{

@@ -163,9 +163,14 @@ export default function KbDocumentIndex({
                 aria-label={`断开订阅 ${s.display_name}`}
                 disabled={unsubscribe.isPending}
                 onClick={() => {
-                  // 默认保留已入库文档——知识库是「我攒下的资料」，不该因退订而蒸发
+                  // 两步确认：第一步必须能真正取消（单个 confirm 的「取消」也会退订，
+                  // 用户按 Esc 就没有退路了）。第二步才问是否连带删文档——
+                  // 默认保留，知识库是「我攒下的资料」，不该因退订而蒸发。
+                  if (!confirm(`断开「${s.display_name}」的订阅？之后不再自动入库新文章。`)) {
+                    return;
+                  }
                   const purge = confirm(
-                    `断开「${s.display_name}」的订阅。\n\n确定 = 同时删除该订阅带进来的文档\n取消 = 保留已入库文档`,
+                    `是否同时删除该订阅已带进来的文档？\n\n确定 = 一并删除\n取消 = 保留这些文档（推荐）`,
                   );
                   unsubscribe.mutate({ id: s.id, purge });
                 }}
@@ -180,7 +185,8 @@ export default function KbDocumentIndex({
 
       {upload.isError && (
         <p className="border-b px-3 py-1.5 text-xs text-destructive" role="alert">
-          {String(upload.error)}
+          {/* 取 .message：String(Error) 会带上 "Error: " 前缀 */}
+          {upload.error instanceof Error ? upload.error.message : String(upload.error)}
         </p>
       )}
 

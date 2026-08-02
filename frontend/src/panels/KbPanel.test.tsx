@@ -149,22 +149,54 @@ describe("KbPanel 三栏", () => {
     expect(screen.getByText("已达上限，停止入库")).toBeTruthy();
   });
 
-  it("断开订阅时询问是否连带删除文档", async () => {
+  const readySource = [
+    {
+      id: "s1", source_type: "wechat_account", source_ref_id: "acc-1",
+      display_name: "财经号", status: "ready", enabled: true, error: null,
+      last_synced_at: null,
+    },
+  ];
+
+  it("断开订阅先确认退订，再问是否连带删除文档（默认保留）", async () => {
     const kb = await import("@/lib/kb");
-    vi.mocked(kb.fetchKbSources).mockResolvedValue([
-      {
-        id: "s1", source_type: "wechat_account", source_ref_id: "acc-1",
-        display_name: "财经号", status: "ready", enabled: true, error: null,
-        last_synced_at: null,
-      },
-    ]);
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(kb.fetchKbSources).mockResolvedValue(readySource);
+    // 第一问（是否退订）确定，第二问（是否删文档）取消 → purge=false
+    const confirmSpy = vi
+      .spyOn(window, "confirm")
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
     await renderPanel();
     await waitFor(() => expect(screen.getByText("订阅：财经号")).toBeTruthy());
     fireEvent.click(screen.getByTestId("kb-source-remove-s1"));
     await waitFor(() =>
       expect(kb.deleteKbSource).toHaveBeenCalledWith("k1", "s1", false),
     );
+    confirmSpy.mockRestore();
+  });
+
+  it("两问都确定时连带删除文档", async () => {
+    const kb = await import("@/lib/kb");
+    vi.mocked(kb.fetchKbSources).mockResolvedValue(readySource);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderPanel();
+    await waitFor(() => expect(screen.getByText("订阅：财经号")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("kb-source-remove-s1"));
+    await waitFor(() =>
+      expect(kb.deleteKbSource).toHaveBeenCalledWith("k1", "s1", true),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("第一问取消则完全不退订（Esc 也走这条路）", async () => {
+    const kb = await import("@/lib/kb");
+    vi.mocked(kb.fetchKbSources).mockResolvedValue(readySource);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderPanel();
+    await waitFor(() => expect(screen.getByText("订阅：财经号")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("kb-source-remove-s1"));
+    // 只问一次就返回，且不发退订请求
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(kb.deleteKbSource).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 });
