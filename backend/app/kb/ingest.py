@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import uuid
 
+from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.kb.chunking import chunk_text, parse_document
 from app.kb.models import KbChunk, KbDocument
@@ -23,6 +25,7 @@ async def ingest_document(document_id: uuid.UUID, filename: str, raw: bytes) -> 
         text = parse_document(filename, raw)
         pieces = chunk_text(text)
         provider = get_embedding_provider()
+        embedding_model = f"{get_settings().embedding_backend}:{get_settings().embedding_model}"
 
         async with sm() as s:
             doc = await s.get(KbDocument, document_id)
@@ -33,6 +36,8 @@ async def ingest_document(document_id: uuid.UUID, filename: str, raw: bytes) -> 
                     s.add(KbChunk(
                         document_id=doc.id, kb_id=doc.kb_id, ordinal=base + offset,
                         content=content, embedding=vec,
+                        content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                        embedding_model=embedding_model,
                     ))
             doc.status = "ready"
             doc.chunk_count = len(pieces)

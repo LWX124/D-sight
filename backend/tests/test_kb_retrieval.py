@@ -13,7 +13,7 @@ async def _kb_with_doc(db, owner, name, text):
     kb = Kb(owner_id=owner.id, name=name)
     db.add(kb)
     await db.flush()
-    doc = KbDocument(kb_id=kb.id, filename=f"{name}.txt", status="pending")
+    doc = KbDocument(kb_id=kb.id, title=f"{name}.txt", filename=f"{name}.txt", status="pending")
     db.add(doc)
     await db.commit()
     await ingest_document(doc.id, doc.filename, text.encode("utf-8"))

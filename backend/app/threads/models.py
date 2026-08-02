@@ -30,3 +30,5 @@ class Thread(Base):
     )
     deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     type: Mapped[str] = mapped_column(String(20), default="chat", server_default="chat")
+    # type="kb" 时指向 kb.id（每库一个常驻会话）；type="news"/"chat" 为 NULL
+    ref_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)

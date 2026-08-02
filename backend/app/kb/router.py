@@ -109,7 +109,9 @@ async def upload_document(
     raw = await file.read()
     if len(raw) > get_settings().kb_max_upload_mb * 1024 * 1024:
         raise HTTPException(413, "文件过大")
-    doc = KbDocument(kb_id=kb.id, filename=file.filename or "unnamed", status="pending")
+    doc = KbDocument(kb_id=kb.id, title=file.filename or "unnamed",
+                     filename=file.filename or "unnamed",
+                     source_type="upload", status="pending")
     db.add(doc)
     await db.commit()
     background.add_task(ingest_document, doc.id, doc.filename, raw)

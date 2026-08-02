@@ -16,7 +16,7 @@ async def _doc(db, filename="a.txt"):
     kb = Kb(owner_id=u.id, name="k")
     db.add(kb)
     await db.flush()
-    doc = KbDocument(kb_id=kb.id, filename=filename, status="pending")
+    doc = KbDocument(kb_id=kb.id, title=filename, filename=filename, status="pending")
     db.add(doc)
     await db.commit()
     return doc.id
