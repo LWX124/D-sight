@@ -30,7 +30,14 @@ def new_mp_client() -> httpx.AsyncClient:
 
 
 async def _mp_get_json(http: httpx.AsyncClient, endpoint: str, params: dict, cred: ActiveCred) -> dict:
-    from app.social.wechat.errors import TransientMpError, check_base_resp
+    """所有 mp cgi-bin 调用的唯一出口：请求前查熔断，命中 200013 则写入熔断。"""
+    from app.core.config import get_settings
+    from app.social.wechat import cooldown
+    from app.social.wechat.errors import FreqControlError, TransientMpError, check_base_resp
+
+    left = await cooldown.remaining()
+    if left > 0:
+        raise FreqControlError(f"微信风控冷却中，剩余 {left}s", retry_after=left)
 
     p = {**params, "token": cred.token, "lang": "zh_CN", "f": "json", "ajax": "1"}
     r = await http.get(endpoint, params=p, headers={"Cookie": cred.cookies})
@@ -39,7 +46,13 @@ async def _mp_get_json(http: httpx.AsyncClient, endpoint: str, params: dict, cre
         data = r.json()
     except json.JSONDecodeError as e:
         raise TransientMpError(f"微信返回非 JSON（可能被限流/验证页）: {e}") from e
-    return check_base_resp(data)
+    try:
+        return check_base_resp(data)
+    except FreqControlError as e:
+        seconds = get_settings().social_freq_cooldown_minutes * 60
+        await cooldown.trip(seconds)
+        e.retry_after = seconds
+        raise
 
 
 async def search_biz(

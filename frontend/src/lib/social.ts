@@ -9,7 +9,18 @@ export type Article = {
 export type Credential = { id: string; nickname: string; avatar: string | null; status: string; expires_at: string };
 
 async function json<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    const body = await r.text();
+    // FastAPI 的错误体是 {"detail": "..."}，直接抛原文会把 JSON 壳子显示给用户
+    let msg = body;
+    try {
+      const d = JSON.parse(body)?.detail;
+      if (typeof d === "string") msg = d;
+    } catch {
+      /* 非 JSON 错误体，原文照抛 */
+    }
+    throw new Error(msg || `请求失败（HTTP ${r.status}）`);
+  }
   return r.json() as Promise<T>;
 }
 

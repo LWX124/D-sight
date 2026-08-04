@@ -35,6 +35,7 @@ def _database():
         os.environ["JWT_SECRET"] = "test-secret"
         os.environ["JWT_REFRESH_SECRET"] = "test-refresh-secret"
         os.environ["EMAIL_BACKEND"] = "console"
+        os.environ["SOCIAL_POLL_GAP_SECONDS"] = "0"  # 测试不真等风控节流间隔
         subprocess.run(
             ["uv", "run", "alembic", "upgrade", "head"],
             cwd=BACKEND_DIR,

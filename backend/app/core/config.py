@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     social_encryption_key: str = "ZHNpZ2h0LXNvY2lhbC1kZXYtZmVybmV0LWtleS0zMmI="
     social_poll_minutes: int = 30
     social_fetch_count: int = 20
+    # 微信 mp 接口风控：命中 freq control(200013) 后的全局冷却时长
+    social_freq_cooldown_minutes: int = 60
+    # 轮询时账号之间的基础间隔（秒，实际带 ±40% 抖动），避免突发连打触发风控
+    social_poll_gap_seconds: float = 5.0
+    # 同一账号手动 refresh 的最小间隔（秒）
+    social_refresh_cooldown_seconds: int = 60
     fund_arb_backend: str = "sina"
     fund_arb_snapshot_seconds: int = 20
     # 深度分析

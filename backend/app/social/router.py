@@ -23,11 +23,26 @@ from app.social.schemas import (
     SubscribeIn,
     SubscriptionOut,
 )
+from app.social.wechat import cooldown
 from app.social.wechat.client import new_mp_client, search_biz
-from app.social.wechat.errors import SessionExpiredError, TransientMpError
+from app.social.wechat.errors import FreqControlError, SessionExpiredError, TransientMpError
 from app.social.wechat.login import poll_status, start_qrcode
 
 router = APIRouter(prefix="/api/social", tags=["social"])
+
+
+def _freq_http(retry_after: int) -> HTTPException:
+    """把风控冷却翻译成 429 + 剩余等待时间，别再让所有错误共用一句含糊文案。"""
+    minutes = max(1, (retry_after + 59) // 60)
+    return HTTPException(
+        429,
+        f"微信接口触发风控限流，请约 {minutes} 分钟后重试（期间系统已自动停止抓取）",
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+def _transient_http(e: TransientMpError) -> HTTPException:
+    return HTTPException(503, f"微信接口调用失败（{e}），请稍后重试")
 
 
 # ---- 登录 ----
@@ -37,8 +52,8 @@ async def login_qrcode(user: User = Depends(get_current_user)) -> dict:
 
     try:
         session_id, mime, img = await start_qrcode()
-    except TransientMpError:
-        raise HTTPException(503, "微信接口暂时不可用（限流），请稍后重试")
+    except TransientMpError as e:
+        raise _transient_http(e)
     return {"login_session": session_id,
             "qrcode": f"data:{mime};base64," + base64.b64encode(img).decode()}
 
@@ -88,8 +103,10 @@ async def search(
     except SessionExpiredError:
         await mark_expired(db, cred.id)
         raise HTTPException(409, "凭证已失效，请重新扫码登录")
-    except TransientMpError:
-        raise HTTPException(503, "微信接口暂时不可用（限流），请稍后重试")
+    except FreqControlError as e:
+        raise _freq_http(e.retry_after)
+    except TransientMpError as e:
+        raise _transient_http(e)
 
 
 @router.post("/wechat/subscriptions", response_model=SubscriptionOut)
@@ -174,7 +191,12 @@ async def get_article(
 async def refresh(
     account_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> dict:
+    from app.core.config import get_settings
     from app.social.ingest import ingest_account
+
+    left = await cooldown.remaining()
+    if left > 0:
+        raise _freq_http(left)
 
     cred = await pick_credential(db)
     if cred is None:
@@ -182,14 +204,27 @@ async def refresh(
     acc = await db.get(WechatAccount, account_id)
     if acc is None:
         raise HTTPException(404, "公众号不存在")
+
+    wait = await cooldown.try_acquire_refresh(
+        str(account_id), get_settings().social_refresh_cooldown_seconds
+    )
+    if wait > 0:
+        raise HTTPException(
+            429, f"该公众号刚刷新过，请 {wait} 秒后再试",
+            headers={"Retry-After": str(wait)},
+        )
+
     try:
         async with new_mp_client() as http:
             added = await ingest_account(db, acc, cred, http)
     except SessionExpiredError:
         await mark_expired(db, cred.id)
+        await cooldown.release_refresh(str(account_id))  # 重新登录后应能立刻重试
         raise HTTPException(409, "凭证已失效，请重新扫码登录")
-    except TransientMpError:
-        raise HTTPException(503, "微信接口暂时不可用（限流），请稍后重试")
+    except FreqControlError as e:
+        raise _freq_http(e.retry_after)
+    except TransientMpError as e:
+        raise _transient_http(e)
     return {"added": added}
 
 
