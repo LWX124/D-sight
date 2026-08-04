@@ -37,10 +37,14 @@ class Settings(BaseSettings):
     news_backend: str = "fake"
     # Fernet 密钥（base64 urlsafe 32 字节）。留空则用 dev 默认（仅测试/本地）。
     social_encryption_key: str = "ZHNpZ2h0LXNvY2lhbC1kZXYtZmVybmV0LWtleS0zMmI="
-    social_poll_minutes: int = 30
+    # appmsgpublish 有独立的日调用配额，超额会被长期限流（实测数天不恢复）。
+    # 每轮按订阅去重后的号数发请求，日调用量 = (1440/poll_minutes) * 账号数。
+    # 180 分钟 → 8 轮/天；即使 20 个号也只有 160 次/天。
+    social_poll_minutes: int = 180
     social_fetch_count: int = 20
-    # 微信 mp 接口风控：命中 freq control(200013) 后的全局冷却时长
-    social_freq_cooldown_minutes: int = 60
+    # 微信 mp 接口风控：命中 freq control(200013) 后的全局冷却时长。
+    # 配额是按天算的，冷却必须跨过一整天，否则恢复后会立刻再次触顶。
+    social_freq_cooldown_minutes: int = 1440
     # 轮询时账号之间的基础间隔（秒，实际带 ±40% 抖动），避免突发连打触发风控
     social_poll_gap_seconds: float = 5.0
     # 同一账号手动 refresh 的最小间隔（秒）

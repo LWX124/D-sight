@@ -23,6 +23,12 @@ def _auth(user):
     return {"Authorization": f"Bearer {create_access_token(str(user.id))}"}
 
 
+def _cooldown_seconds() -> int:
+    from app.core.config import get_settings
+
+    return get_settings().social_freq_cooldown_minutes * 60
+
+
 def _active_cred_row(user_id) -> WechatCredential:
     return WechatCredential(
         user_id=user_id, token=crypto.encrypt("tok"), cookies=crypto.encrypt("ck"),
@@ -118,8 +124,8 @@ async def test_200013_trips_cooldown(fake_cooldown):
             await appmsg_publish(http, _cred(), "F1")
 
     assert len(calls) == 1
-    assert fake.tripped == [60 * 60]  # 默认 social_freq_cooldown_minutes=60
-    assert ei.value.retry_after == 60 * 60
+    assert fake.tripped == [_cooldown_seconds()]
+    assert ei.value.retry_after == _cooldown_seconds()
 
 
 @pytest.mark.asyncio
@@ -201,7 +207,7 @@ async def test_poll_aborts_on_freq_control(db_session, monkeypatch, fake_cooldow
 
     assert added == 0
     assert len(calls) == 1  # 第一个号就撞墙，剩下的不再打
-    assert fake.tripped == [60 * 60]
+    assert fake.tripped == [_cooldown_seconds()]
     await db_session.refresh(cred_row)
     assert cred_row.status == "active"  # 风控不得烧掉凭证
 

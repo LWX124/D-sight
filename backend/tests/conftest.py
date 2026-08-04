@@ -36,6 +36,9 @@ def _database():
         os.environ["JWT_REFRESH_SECRET"] = "test-refresh-secret"
         os.environ["EMAIL_BACKEND"] = "console"
         os.environ["SOCIAL_POLL_GAP_SECONDS"] = "0"  # 测试不真等风控节流间隔
+        # 独立 Redis db：否则和本机 dev 后端共用 db0，它写的风控冷却（TTL 长达 24h）
+        # 会把整个测试会话堵死。session_store / ratelimit 同样需要这层隔离。
+        os.environ["REDIS_URL"] = "redis://localhost:6381/15"
         subprocess.run(
             ["uv", "run", "alembic", "upgrade", "head"],
             cwd=BACKEND_DIR,
@@ -53,6 +56,18 @@ async def client():
         transport=ASGITransport(app=create_app()), base_url="http://t"
     ) as c:
         yield c
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clear_wechat_cooldown():
+    """清掉残留的微信风控冷却。
+
+    冷却 TTL 长达 24h，任一用例真写进去就会毒死整个会话的后续抓取用例。
+    """
+    from app.social.wechat import cooldown
+
+    await cooldown.clear()
+    yield
 
 
 @pytest_asyncio.fixture
