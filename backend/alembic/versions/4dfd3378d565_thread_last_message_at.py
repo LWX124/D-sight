@@ -1,7 +1,7 @@
 """thread_last_message_at
 
 Revision ID: 4dfd3378d565
-Revises: 7e2c0713f82d
+Revises: d8381ce6d30d
 Create Date: 2026-07-31 17:15:19.199864
 
 """
