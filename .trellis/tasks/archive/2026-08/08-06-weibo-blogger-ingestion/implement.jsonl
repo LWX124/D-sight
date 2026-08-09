@@ -1,0 +1,14 @@
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/prd.md","reason":"Confirmed product scope, risk boundary, and acceptance criteria"}
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/design.md","reason":"Authoritative data flow, contracts, error semantics, and architecture"}
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/implement.md","reason":"Ordered implementation and verification phases"}
+{"file":"CONTEXT.md","reason":"Canonical social-domain terminology"}
+{"file":"docs/adr/0001-use-authenticated-weibo-web-session-for-mvp.md","reason":"Accepted source and risk trade-off"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Database and migration constraints"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Backend error contract guidance"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend testing and quality guidance"}
+{"file":".trellis/spec/backend/social-weibo.md","reason":"Executable Weibo API, storage, error, and test contract"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Frontend component boundaries"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Frontend API contract type safety"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend verification guidance"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"End-to-end source-to-Agent contract consistency"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing crypto, scheduler, and UI patterns without duplication"}

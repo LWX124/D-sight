@@ -1,0 +1,9 @@
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/prd.md","reason":"Check every acceptance criterion against evidence"}
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/design.md","reason":"Check implementation against contracts, security, and failure handling"}
+{"file":".trellis/tasks/08-06-weibo-blogger-ingestion/implement.md","reason":"Check all planned verification commands and completion conditions"}
+{"file":"CONTEXT.md","reason":"Check code and UI terminology for domain consistency"}
+{"file":"docs/adr/0001-use-authenticated-weibo-web-session-for-mvp.md","reason":"Check that experimental/no-SLA constraints remain visible"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Audit database, API, frontend, scheduler, and Agent boundaries"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend regression and static-check expectations"}
+{"file":".trellis/spec/backend/social-weibo.md","reason":"Check the implemented Weibo integration against its executable contract"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend regression, accessibility, and build expectations"}
