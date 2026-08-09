@@ -17,8 +17,12 @@ import {
   startLoginQrcode,
   subscribe,
 } from "@/lib/social";
+import WeiboTab from "./social/WeiboTab";
 
-const SOURCE_TABS = [{ key: "wechat", label: "微信公众号" }] as const;
+const SOURCE_TABS = [
+  { key: "wechat", label: "微信公众号" },
+  { key: "weibo", label: "微博" },
+] as const;
 type SourceKey = (typeof SOURCE_TABS)[number]["key"];
 
 export default function SocialPanel() {
@@ -45,6 +49,7 @@ export default function SocialPanel() {
         ))}
       </div>
       {activeTab === "wechat" && <WechatTab />}
+      {activeTab === "weibo" && <WeiboTab />}
     </div>
   );
 }

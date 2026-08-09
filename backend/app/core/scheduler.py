@@ -48,6 +48,21 @@ def start_scheduler() -> AsyncIOScheduler:
         id="social_poll", replace_existing=True,
     )
 
+    from app.social.weibo.job import poll_all_subscriptions as poll_all_weibo
+
+    async def _weibo_job():
+        n = await poll_all_weibo()
+        _log.info("weibo poll done: %d new posts", n)
+
+    _scheduler.add_job(
+        _weibo_job,
+        IntervalTrigger(minutes=get_settings().weibo_poll_minutes),
+        id="weibo_poll",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     from app.fund_arb.job import evening_pipeline, morning_job, snapshot_tick
 
     async def _fund_arb_tick():

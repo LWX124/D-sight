@@ -3,7 +3,13 @@ import datetime as dt
 from langchain_core.tools import tool
 from sqlalchemy import select
 
-from app.social.models import WechatAccount, WechatArticle
+from app.social.models import (
+    WechatAccount,
+    WechatArticle,
+    WeiboAccount,
+    WeiboPost,
+    WeiboSubscription,
+)
 
 
 def make_wechat_query(session_factory):
@@ -42,3 +48,45 @@ def make_wechat_query(session_factory):
         return "\n\n".join(parts)
 
     return wechat_query
+
+
+def make_weibo_query(session_factory, user_id):
+    @tool
+    async def weibo_query(
+        account: str = "", keyword: str = "", days: int = 30, limit: int = 20
+    ) -> str:
+        """查询当前用户已订阅账号的本地微博内容快照。
+        account 按账号名模糊筛选，keyword 按正文筛选，days 是时间窗天数。"""
+        try:
+            since = dt.datetime.now(dt.UTC) - dt.timedelta(days=max(1, min(days, 3650)))
+            q = (
+                select(WeiboPost, WeiboAccount.name)
+                .join(WeiboAccount, WeiboPost.account_id == WeiboAccount.id)
+                .join(
+                    WeiboSubscription,
+                    WeiboSubscription.account_id == WeiboAccount.id,
+                )
+                .where(
+                    WeiboSubscription.user_id == user_id,
+                    WeiboSubscription.enabled.is_(True),
+                    WeiboPost.published_at >= since,
+                )
+            )
+            if account:
+                q = q.where(WeiboAccount.name.ilike(f"%{account}%"))
+            if keyword:
+                q = q.where(WeiboPost.content.ilike(f"%{keyword}%"))
+            q = q.order_by(WeiboPost.published_at.desc()).limit(max(1, min(limit, 50)))
+            async with session_factory() as db:
+                rows = (await db.execute(q)).all()
+        except Exception as exc:  # noqa: BLE001
+            return f"（微博内容查询失败：{exc}）"
+        if not rows:
+            return "（时间窗内无相关微博内容）"
+        parts = []
+        for post, name in rows:
+            when = post.published_at.astimezone().strftime("%m-%d %H:%M")
+            parts.append(f"[{when}] {name}\n{post.content[:500]}\n原文：{post.url}")
+        return "\n\n".join(parts)
+
+    return weibo_query

@@ -21,6 +21,7 @@ BUILTIN_TOOLS = [
     {"id": "run_python", "description": "执行 Python 代码进行数据分析和计算", "tags": ["code", "analysis", "compute"]},
     {"id": "news_query", "description": "查询新闻资讯", "tags": ["news", "information"]},
     {"id": "wechat_query", "description": "查询微信公众号文章", "tags": ["wechat", "social", "news"]},
+    {"id": "weibo_query", "description": "查询当前用户订阅的微博内容快照", "tags": ["weibo", "social", "news"]},
     {"id": "fund_arb_query", "description": "查询基金套利数据", "tags": ["fund", "arbitrage"]},
 ]
 

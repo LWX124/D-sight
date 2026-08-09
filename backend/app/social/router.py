@@ -17,7 +17,6 @@ from app.social.models import (
     WechatSubscription,
 )
 from app.social.schemas import (
-    AccountOut,
     ArticleOut,
     CredentialOut,
     SubscribeIn,
@@ -27,8 +26,10 @@ from app.social.wechat import cooldown
 from app.social.wechat.client import new_mp_client, search_biz
 from app.social.wechat.errors import FreqControlError, SessionExpiredError, TransientMpError
 from app.social.wechat.login import poll_status, start_qrcode
+from app.social.weibo.router import router as weibo_router
 
 router = APIRouter(prefix="/api/social", tags=["social"])
+router.include_router(weibo_router)
 
 
 def _freq_http(retry_after: int) -> HTTPException:

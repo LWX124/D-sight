@@ -12,6 +12,18 @@ vi.mock("@/lib/social", () => ({
   refreshAccount: vi.fn(),
   startLoginQrcode: vi.fn(),
   pollLoginStatus: vi.fn(),
+  getWeiboCredential: vi.fn(async () => ({
+    configured: false, status: null, weibo_uid: null, nickname: null, avatar: null,
+    last_verified_at: null, blocked_until: null, last_error: null, can_manage: false,
+  })),
+  listWeiboSubscriptions: vi.fn(async () => []),
+  previewWeiboAccount: vi.fn(),
+  subscribeWeibo: vi.fn(),
+  listWeiboPosts: vi.fn(async () => []),
+  refreshWeiboAccount: vi.fn(),
+  unsubscribeWeibo: vi.fn(),
+  saveWeiboCredential: vi.fn(),
+  deleteWeiboCredential: vi.fn(),
 }));
 
 describe("SocialPanel 渲染", () => {
@@ -26,6 +38,16 @@ describe("SocialPanel 渲染", () => {
     const tab = screen.getByRole("tab", { name: "微信公众号" });
     expect(tab).toBeTruthy();
     expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "微博" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("测试公众号")).toBeTruthy());
+  });
+
+  it("可切换到微博独立页面", async () => {
+    const { default: SocialPanel } = await import("./SocialPanel");
+    render(<SocialPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "微博" }));
+    await waitFor(() => expect(screen.getByText("添加微博账号")).toBeTruthy());
+    expect(screen.getByText("请联系管理员配置或更新微博 Cookie")).toBeTruthy();
   });
 
   it("加载订阅列表并展示公众号名称", async () => {

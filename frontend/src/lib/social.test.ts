@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import * as api from "./api";
-import { listArticles, searchAccounts } from "./social";
+import { listArticles, previewWeiboAccount, refreshWeiboAccount, searchAccounts } from "./social";
 
 describe("social api", () => {
   it("searchAccounts hits search endpoint with keyword", async () => {
@@ -19,5 +19,22 @@ describe("social api", () => {
     );
     await listArticles("acc-1");
     expect(spy.mock.calls[0][0] as string).toContain("account_id=acc-1");
+  });
+
+  it("previewWeiboAccount sends profile_url as JSON", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({ account_id: "a1", uid: "123456", name: "账号", avatar: null, description: null, profile_url: "https://weibo.com/u/123456" }), { status: 200 }),
+    );
+    await previewWeiboAccount("https://weibo.com/u/123456");
+    expect(spy.mock.calls[0][0]).toBe("/api/social/weibo/accounts/preview");
+    expect(JSON.parse(String((spy.mock.calls[0][1] as RequestInit).body)).profile_url).toContain("123456");
+  });
+
+  it("refreshWeiboAccount uses encoded account_id", async () => {
+    const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
+      new Response(JSON.stringify({ added: 0 }), { status: 200 }),
+    );
+    await refreshWeiboAccount("account id");
+    expect(spy.mock.calls[0][0]).toContain("account_id=account%20id");
   });
 });

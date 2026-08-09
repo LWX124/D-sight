@@ -65,8 +65,10 @@ async def _clear_wechat_cooldown():
     冷却 TTL 长达 24h，任一用例真写进去就会毒死整个会话的后续抓取用例。
     """
     from app.social.wechat import cooldown
+    from app.social.weibo import cooldown as weibo_cooldown
 
     await cooldown.clear()
+    await weibo_cooldown.clear()
     yield
 
 

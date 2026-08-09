@@ -8,6 +8,49 @@ export type Article = {
 };
 export type Credential = { id: string; nickname: string; avatar: string | null; status: string; expires_at: string };
 
+export type WeiboCredentialStatus = {
+  configured: boolean;
+  status: "active" | "expired" | "blocked" | null;
+  weibo_uid: string | null;
+  nickname: string | null;
+  avatar: string | null;
+  last_verified_at: string | null;
+  blocked_until: string | null;
+  last_error: string | null;
+  can_manage: boolean;
+};
+export type WeiboAccount = {
+  account_id: string;
+  uid: string;
+  name: string;
+  avatar: string | null;
+  description: string | null;
+  profile_url: string;
+};
+export type WeiboSubscription = WeiboAccount & {
+  id: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  last_sync_status: string;
+  last_sync_error: string | null;
+};
+export type WeiboMedia = {
+  type: "image" | "video";
+  url: string;
+  poster_url?: string | null;
+};
+export type WeiboPost = {
+  id: string;
+  account_id: string;
+  account_name: string;
+  external_id: string;
+  content: string;
+  url: string;
+  media: WeiboMedia[];
+  published_at: string;
+  captured_at: string;
+};
+
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) {
     const body = await r.text();
@@ -64,4 +107,63 @@ export async function pollLoginStatus(session: string): Promise<{ status: string
 
 export async function listCredentials(): Promise<Credential[]> {
   return json(await apiFetch(`/api/social/wechat/credentials`));
+}
+
+export async function getWeiboCredential(): Promise<WeiboCredentialStatus> {
+  return json(await apiFetch("/api/social/weibo/credential"));
+}
+
+export async function saveWeiboCredential(cookies: string): Promise<WeiboCredentialStatus> {
+  return json(await apiFetch("/api/social/weibo/credential", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cookies }),
+  }));
+}
+
+export async function deleteWeiboCredential(): Promise<void> {
+  await json(await apiFetch("/api/social/weibo/credential", { method: "DELETE" }));
+}
+
+export async function previewWeiboAccount(profileUrl: string): Promise<WeiboAccount> {
+  return json(await apiFetch("/api/social/weibo/accounts/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profile_url: profileUrl }),
+  }));
+}
+
+export async function subscribeWeibo(accountId: string): Promise<{
+  subscription: WeiboSubscription;
+  initial_sync_status: string;
+  added: number;
+}> {
+  return json(await apiFetch("/api/social/weibo/subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_id: accountId }),
+  }));
+}
+
+export async function listWeiboSubscriptions(): Promise<WeiboSubscription[]> {
+  return json(await apiFetch("/api/social/weibo/subscriptions"));
+}
+
+export async function unsubscribeWeibo(subscriptionId: string): Promise<void> {
+  await json(await apiFetch(`/api/social/weibo/subscriptions/${subscriptionId}`, {
+    method: "DELETE",
+  }));
+}
+
+export async function listWeiboPosts(accountId: string, limit = 20): Promise<WeiboPost[]> {
+  return json(await apiFetch(
+    `/api/social/weibo/posts?account_id=${encodeURIComponent(accountId)}&limit=${limit}`,
+  ));
+}
+
+export async function refreshWeiboAccount(accountId: string): Promise<{ added: number }> {
+  return json(await apiFetch(
+    `/api/social/weibo/refresh?account_id=${encodeURIComponent(accountId)}`,
+    { method: "POST" },
+  ));
 }

@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     social_poll_gap_seconds: float = 5.0
     # 同一账号手动 refresh 的最小间隔（秒）
     social_refresh_cooldown_seconds: int = 60
+    # 微博使用独立的低频登录态采集链路，不与微信配额或冷却共享。
+    weibo_poll_minutes: int = 60
+    weibo_max_accounts: int = 20
+    weibo_fetch_count: int = 20
+    weibo_max_pages: int = 3
+    weibo_poll_gap_seconds: float = 5.0
+    weibo_refresh_cooldown_seconds: int = 300
+    weibo_global_cooldown_minutes: int = 1440
+    weibo_request_timeout_seconds: float = 20.0
     fund_arb_backend: str = "sina"
     fund_arb_snapshot_seconds: int = 20
     # 深度分析
