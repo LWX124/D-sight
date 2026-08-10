@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { RuntimeProvider } from "@/chat/RuntimeProvider";
 import { DraftThreadComposer, Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Panel, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
@@ -133,6 +134,7 @@ export default function ChatPage() {
                 {credits.balance}/{credits.monthly_quota}
               </span>
             )}
+            <ThemeToggle />
             <Button variant="ghost" size="sm" onClick={onLogout} className="cursor-pointer">
               退出
             </Button>

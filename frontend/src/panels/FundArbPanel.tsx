@@ -100,7 +100,7 @@ export default function FundArbPanel() {
                 {c.label}
                 <span
                   className={`absolute inset-x-2 bottom-0 h-px bg-primary transition-opacity duration-150 ${
-                    active ? "opacity-100 shadow-[0_0_6px_var(--color-primary)]" : "opacity-0"
+                    active ? "opacity-100" : "opacity-0"
                   }`}
                 />
               </button>
@@ -111,7 +111,7 @@ export default function FundArbPanel() {
           <span
             className={`size-1.5 rounded-full ${
               marketOpen
-                ? "bg-down text-down animate-pulse-glow"
+                ? "bg-down"
                 : "bg-muted-foreground/50"
             }`}
           />

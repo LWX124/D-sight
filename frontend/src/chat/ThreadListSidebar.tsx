@@ -94,18 +94,17 @@ export function ThreadListSidebar({
         <div
           className={cn(
             "flex size-7 items-center justify-center rounded-md",
-            "bg-gradient-to-br from-primary via-primary to-primary/70",
-            "text-primary-foreground animate-glow-pulse",
+            "bg-primary text-primary-foreground",
           )}
         >
           <span className="nums text-[13px] font-semibold">D</span>
         </div>
         <div className="flex flex-col leading-none">
-          <span className="text-[13px] font-semibold tracking-tight text-foreground">
+          <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">
             D-sight
           </span>
           <span className="nums mt-0.5 text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70">
-            Terminal
+            Financial Intelligence
           </span>
         </div>
       </div>
@@ -136,7 +135,7 @@ export function ThreadListSidebar({
               />
               <span className="flex-1 text-left">{label}</span>
               {active && (
-                <span className="size-1 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]" />
+                <span className="size-1.5 rounded-full bg-primary" />
               )}
             </button>
           );

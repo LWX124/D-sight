@@ -35,31 +35,22 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4">
-      {/* 背景网格 + 顶部光晕 */}
+      {/* 简洁背景装饰 */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, oklch(1 0 0 / 3%) 1px, transparent 1px), linear-gradient(to bottom, oklch(1 0 0 / 3%) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[40rem] -translate-x-1/2 rounded-full bg-primary/15 blur-[120px]"
+        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[40rem] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]"
       />
 
-      <Card className="relative w-full max-w-sm border-border/60 bg-card/60 backdrop-blur animate-fade-up">
+      <Card className="relative w-full max-w-sm border-border bg-card/80 backdrop-blur animate-fade-up">
         <CardHeader>
           <div className="mb-2 flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-md bg-gradient-to-br from-primary via-primary to-primary/70 text-primary-foreground animate-glow-pulse">
+            <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <span className="nums text-sm font-semibold">D</span>
             </div>
             <div className="flex flex-col leading-none">
               <span className="text-sm font-semibold tracking-tight">D-sight</span>
               <span className="nums mt-0.5 text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
-                Terminal
+                Financial Intelligence
               </span>
             </div>
           </div>
