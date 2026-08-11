@@ -15,7 +15,7 @@ from app.core.akshare_runtime import call_akshare
 _log = logging.getLogger(__name__)
 
 SPOT_FX_SINA = {"USD": "fx_susdcny", "HKD": "fx_shkdcny", "JPY": "fx_sjpycny"}
-MID_FX_SYMBOL = {"USD": "USDCNH_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
+MID_FX_SYMBOL = {"USD": "USDCNY_MID", "HKD": "HKDCNY_MID", "JPY": "JPYCNY_MID"}
 
 # Sina hq.sinajs.cn 不支持的代码：实测返回空 payload 或全 0，每个 tick 都打 warning
 # 且浪费一次 HTTP 请求。这些代码的实时价格已由东财 push2/kline 兜底（见

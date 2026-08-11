@@ -6,13 +6,10 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
 
 from app.auth.models import User
 from app.core.security import create_access_token, hash_password
 from app.credits.models import CreditAccount
-from app.credits.service import ensure_account
-from tests.test_auth_api import _register
 
 
 def _auth(user) -> dict:

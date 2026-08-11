@@ -15,7 +15,6 @@ from sqlalchemy import select
 
 from app.credits.models import CreditAccount, CreditTransaction
 from app.credits.service import InsufficientCredits
-from app.deep_analysis.models import DeepAnalysisReport
 from app.deep_analysis.service import (
     IdempotencyFingerprintMismatch,
     _normalize_ticker,

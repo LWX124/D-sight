@@ -84,6 +84,7 @@ async def _ingest_with_client(
     client: WeiboClient,
     *,
     initial: bool,
+    commit: bool,
 ) -> int:
     settings = get_settings()
     maximum = settings.weibo_fetch_count
@@ -143,7 +144,10 @@ async def _ingest_with_client(
     account.last_synced_at = dt.datetime.now(dt.UTC)
     account.last_sync_status = "ok"
     account.last_sync_error = None
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return added
 
 
@@ -164,9 +168,22 @@ async def ingest_account(
     client: WeiboClient | None = None,
     *,
     initial: bool = False,
+    commit: bool = True,
 ) -> int:
     active = credential or await verify_active(db)
     if client is not None:
-        return await _ingest_with_client(db, account, client, initial=initial)
+        return await _ingest_with_client(
+            db,
+            account,
+            client,
+            initial=initial,
+            commit=commit,
+        )
     async with new_weibo_client(active.cookies) as upstream:
-        return await _ingest_with_client(db, account, upstream, initial=initial)
+        return await _ingest_with_client(
+            db,
+            account,
+            upstream,
+            initial=initial,
+            commit=commit,
+        )

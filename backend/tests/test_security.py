@@ -41,6 +41,10 @@ def test_token_type_mismatch_rejected():
 
 
 def test_forged_token_rejected():
-    forged = jwt.encode({"sub": "u", "type": "access"}, "other-secret", algorithm="HS256")
+    forged = jwt.encode(
+        {"sub": "u", "type": "access"},
+        "other-test-only-secret-at-least-32-bytes",
+        algorithm="HS256",
+    )
     with pytest.raises(jwt.InvalidTokenError):
         decode_token(forged)

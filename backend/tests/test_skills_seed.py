@@ -1,4 +1,5 @@
 import uuid as _uuid
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
@@ -23,16 +24,19 @@ def test_parse_missing_frontmatter_falls_back():
 
 @pytest.mark.asyncio
 async def test_upsert_idempotent_and_preserves_ops_fields(db_session):
+    expected = len(
+        list((Path(__file__).resolve().parents[1] / "skills_data" / "skills").glob("*/SKILL.md"))
+    )
     n1 = await seed.upsert_skills(db_session)
-    assert n1 == 19
+    assert n1 == expected
     one = (await db_session.execute(select(Skill).limit(1))).scalar_one()
     one.price = 42
     one.is_active = False
     await db_session.flush()
     n2 = await seed.upsert_skills(db_session)  # 再跑不重复、不覆盖运营字段
-    assert n2 == 19
+    assert n2 == expected
     total = (await db_session.execute(select(func.count()).select_from(Skill))).scalar_one()
-    assert total >= 19
+    assert total >= expected
     again = await db_session.get(Skill, one.id)
     assert again.price == 42 and again.is_active is False
     assert (await db_session.execute(

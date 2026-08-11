@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.core.db import get_db
+from app.core.config import get_settings
 from app.social.credentials import mark_expired, pick_credential
 from app.social.ingest import fetch_article_content, get_or_create_account
 from app.social.models import (
@@ -22,14 +23,24 @@ from app.social.schemas import (
     SubscribeIn,
     SubscriptionOut,
 )
+from app.social.providers.base import PublisherDTO
+from app.social.refresh import project_wechat_articles
+from app.social.subscription_sync import (
+    delete_legacy_subscription_pair,
+    ensure_unified_subscription,
+)
 from app.social.wechat import cooldown
 from app.social.wechat.client import new_mp_client, search_biz
 from app.social.wechat.errors import FreqControlError, SessionExpiredError, TransientMpError
 from app.social.wechat.login import poll_status, start_qrcode
 from app.social.weibo.router import router as weibo_router
+from app.social.feed_router import router as feed_router
+from app.social.bookmark_router import router as bookmark_router
 
 router = APIRouter(prefix="/api/social", tags=["social"])
 router.include_router(weibo_router)
+router.include_router(feed_router)
+router.include_router(bookmark_router)
 
 
 def _freq_http(retry_after: int) -> HTTPException:
@@ -114,7 +125,13 @@ async def search(
 async def subscribe(
     body: SubscribeIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    acc = await get_or_create_account(db, body.fakeid, body.name, body.avatar)
+    acc = await get_or_create_account(
+        db,
+        body.fakeid,
+        body.name,
+        body.avatar,
+        commit=False,
+    )
     sub = await db.scalar(
         select(WechatSubscription).where(
             WechatSubscription.user_id == user.id, WechatSubscription.account_id == acc.id
@@ -123,8 +140,23 @@ async def subscribe(
     if sub is None:
         sub = WechatSubscription(user_id=user.id, account_id=acc.id, enabled=True)
         db.add(sub)
-        await db.commit()
-        await db.refresh(sub)
+    else:
+        sub.enabled = True
+    publisher, _ = await ensure_unified_subscription(
+        db,
+        user.id,
+        PublisherDTO(
+            platform="wechat",
+            external_id=acc.fakeid,
+            name=acc.name,
+            avatar=acc.avatar,
+            description=acc.signature,
+            provider="wechat_mp",
+        ),
+    )
+    await project_wechat_articles(db, publisher, acc, get_settings())
+    await db.commit()
+    await db.refresh(sub)
     return SubscriptionOut(id=str(sub.id), account_id=str(acc.id), fakeid=acc.fakeid,
                            name=acc.name, avatar=acc.avatar, enabled=sub.enabled)
 
@@ -150,7 +182,17 @@ async def unsubscribe(
     sub = await db.get(WechatSubscription, sub_id)
     if sub is None or sub.user_id != user.id:
         raise HTTPException(404, "订阅不存在")
-    await db.delete(sub)
+    account = await db.get(WechatAccount, sub.account_id)
+    if account is None:
+        await db.delete(sub)
+    else:
+        await delete_legacy_subscription_pair(
+            db,
+            user_id=user.id,
+            platform="wechat",
+            external_id=account.fakeid,
+            legacy_subscription=sub,
+        )
     await db.commit()
     return {"ok": True}
 

@@ -32,8 +32,11 @@ def test_convert_skill(tmp_path: Path):
 def test_generated_assets_present():
     """入库的生成产物必须存在且完整（防 fresh clone 空目录静默）。"""
     root = Path(__file__).resolve().parents[1] / "skills_data"
-    skills = list((root / "skills").glob("*/SKILL.md"))
-    assert len(skills) == 19
+    skill_dirs = {path for path in (root / "skills").iterdir() if path.is_dir()}
+    skills = {(path.parent, path) for path in (root / "skills").glob("*/SKILL.md")}
+    assert skill_dirs
+    assert {parent for parent, _ in skills} == skill_dirs
+    assert all(path.read_text(encoding="utf-8").strip() for _, path in skills)
     assert (root / "tools" / "financial_rigor.py").exists()
     audit = (root / "tools" / "report_audit.py").read_text(encoding="utf-8")
     assert "--results-file" in audit  # PoC 输入#4：补丁已打

@@ -15,15 +15,11 @@
 import uuid
 
 import pytest
-from sqlalchemy import select
 
-from app.auth.models import User
 from app.core.security import create_access_token
 from app.credits.models import CreditAccount
 from tests.deep_analysis.conftest import _mk_user
 
-import httpx  # noqa: E402
-from httpx import ASGITransport  # noqa: E402
 
 
 def _auth(user) -> dict:

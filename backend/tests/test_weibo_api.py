@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from app.auth.models import User
 from app.core.security import create_access_token, hash_password
 from app.social.models import WeiboAccount, WeiboPost, WeiboSubscription
+from app.social.unified_models import SocialPublisher, SocialSubscription
 from app.social.weibo.credentials import ActiveWeiboCredential
 from app.social.weibo.errors import WeiboTransientError
 
@@ -129,8 +130,9 @@ async def test_failed_initial_sync_rolls_back_new_subscription(
     async def active(db):
         return ActiveWeiboCredential(uuid.uuid4(), "test=1")
 
-    async def fail_ingest(db, account, credential, *, initial=False):
+    async def fail_ingest(db, account, credential, *, initial=False, commit=True):
         assert initial is True
+        assert commit is False
         raise WeiboTransientError("temporary")
 
     async def no_cooldown():
@@ -154,6 +156,122 @@ async def test_failed_initial_sync_rolls_back_new_subscription(
         )
     )
     assert subscription is None
+    publisher = await db_session.scalar(
+        select(SocialPublisher).where(
+            SocialPublisher.platform == "weibo",
+            SocialPublisher.external_id == account.uid,
+        )
+    )
+    if publisher is not None:
+        assert await db_session.scalar(
+            select(SocialSubscription).where(
+                SocialSubscription.user_id == registered_user.id,
+                SocialSubscription.publisher_id == publisher.id,
+            )
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_weibo_subscription_projects_feed_and_deletes_both_directions(
+    client, registered_user, db_session, monkeypatch
+):
+    from app.social.weibo import router
+
+    await db_session.execute(delete(WeiboSubscription))
+    await db_session.commit()
+    account = WeiboAccount(
+        uid=f"6{uuid.uuid4().int % 10**10:010d}",
+        name="统一微博",
+        profile_url="https://weibo.com/u/6",
+        container_id="1076036",
+    )
+    db_session.add(account)
+    await db_session.commit()
+
+    async def active(db):
+        return ActiveWeiboCredential(uuid.uuid4(), "test=1")
+
+    async def ingest(db, target, credential, *, initial=False, commit=True):
+        assert target.id == account.id and initial is True and commit is False
+        db.add(
+            WeiboPost(
+                account_id=target.id,
+                external_id=uuid.uuid4().hex,
+                bid=uuid.uuid4().hex[:8],
+                content="旧微博客户端也能看到",
+                url="https://weibo.com/6/post",
+                media=[],
+                published_at=dt.datetime.now(dt.UTC),
+                captured_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        await db.flush()
+        return 1
+
+    async def no_cooldown():
+        return 0
+
+    monkeypatch.setattr(router, "_active_or_409", active)
+    monkeypatch.setattr(router, "ingest_account", ingest)
+    monkeypatch.setattr(router.cooldown, "remaining", no_cooldown)
+    headers = _auth(registered_user)
+
+    subscribed = await client.post(
+        "/api/social/weibo/subscriptions",
+        json={"account_id": str(account.id)},
+        headers=headers,
+    )
+    assert subscribed.status_code == 200
+    feed = await client.get("/api/social/feed", headers=headers)
+    assert any(
+        row["platform"] == "weibo" and row["digest"] is None
+        for row in feed.json()["items"]
+    )
+    publisher = await db_session.scalar(
+        select(SocialPublisher).where(
+            SocialPublisher.platform == "weibo",
+            SocialPublisher.external_id == account.uid,
+        )
+    )
+    unified = await db_session.scalar(
+        select(SocialSubscription).where(
+            SocialSubscription.user_id == registered_user.id,
+            SocialSubscription.publisher_id == publisher.id,
+        )
+    )
+
+    removed_legacy = await client.delete(
+        f"/api/social/weibo/subscriptions/{subscribed.json()['subscription']['id']}",
+        headers=headers,
+    )
+    assert removed_legacy.status_code == 200
+    assert await db_session.scalar(
+        select(SocialSubscription).where(SocialSubscription.id == unified.id)
+    ) is None
+
+    subscribed_again = await client.post(
+        "/api/social/weibo/subscriptions",
+        json={"account_id": str(account.id)},
+        headers=headers,
+    )
+    assert subscribed_again.status_code == 200
+    unified = await db_session.scalar(
+        select(SocialSubscription).where(
+            SocialSubscription.user_id == registered_user.id,
+            SocialSubscription.publisher_id == publisher.id,
+        )
+    )
+    removed_unified = await client.delete(
+        f"/api/social/subscriptions/{unified.id}",
+        headers=headers,
+    )
+    assert removed_unified.status_code == 200
+    assert await db_session.scalar(
+        select(WeiboSubscription).where(
+            WeiboSubscription.user_id == registered_user.id,
+            WeiboSubscription.account_id == account.id,
+        )
+    ) is None
 
 
 @pytest.mark.asyncio

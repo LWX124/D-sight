@@ -15,6 +15,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/auth", () => ({
   logout: vi.fn(),
 }));
+vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 
 vi.mock("@/chat/ThreadListSidebar", () => ({
   threadsKey: ["threads"],

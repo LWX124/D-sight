@@ -112,13 +112,16 @@ async def test_cold_start_from_daily(db_session):
 @pytest.mark.asyncio
 async def test_rows_sorted_by_abs_premium(db_session):
     now = dt.datetime.now(dt.UTC)
-    mk = lambda code, prem: FundSnapshot(
-        fund_code=code, fund_name=code, category="domestic_lof", price=1.0,
-        price_pct=0.0, amount=None, est_nav=1.0, premium=prem, nav=1.0,
-        nav_date=None, err_5d=None, low_confidence=False, approx=False,
-        purchase_status=None, redemption_status=None, purchase_limit=None,
-        as_of=now, source="realtime",
-    )
+
+    def mk(code, prem):
+        return FundSnapshot(
+            fund_code=code, fund_name=code, category="domestic_lof", price=1.0,
+            price_pct=0.0, amount=None, est_nav=1.0, premium=prem, nav=1.0,
+            nav_date=None, err_5d=None, low_confidence=False, approx=False,
+            purchase_status=None, redemption_status=None, purchase_limit=None,
+            as_of=now, source="realtime",
+        )
+
     get_store().update([mk("a", 0.5), mk("b", -3.0), mk("c", None), mk("d", 2.0)])
     codes = [s.fund_code for s in get_store().rows("domestic_lof")]
     assert codes == ["b", "d", "a", "c"]

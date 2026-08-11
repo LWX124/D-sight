@@ -11,7 +11,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.deep_analysis.models import DeepAnalysisReport
@@ -37,7 +36,7 @@ async def _create_pending(Session, user_id) -> DeepAnalysisReport:
 @pytest.mark.asyncio
 async def test_claim_sets_running(db_session, da_user):
     Session = get_sessionmaker()
-    r = await _create_pending(Session, da_user.id)
+    await _create_pending(Session, da_user.id)
 
     claimed = await _claim_one(Session)
     assert claimed is not None

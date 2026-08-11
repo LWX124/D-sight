@@ -32,8 +32,10 @@ def _database():
     with PostgresContainer("pgvector/pgvector:pg16") as pg:
         url = pg.get_connection_url().replace("psycopg2", "asyncpg")
         os.environ["DATABASE_URL"] = url
-        os.environ["JWT_SECRET"] = "test-secret"
-        os.environ["JWT_REFRESH_SECRET"] = "test-refresh-secret"
+        # HS256 requires at least 256 bits. Keep tests on explicit test-only
+        # keys so PyJWT warnings cannot hide actionable suite warnings.
+        os.environ["JWT_SECRET"] = "test-only-jwt-secret-32-bytes-minimum"
+        os.environ["JWT_REFRESH_SECRET"] = "test-only-refresh-secret-32-bytes-minimum"
         os.environ["EMAIL_BACKEND"] = "console"
         os.environ["SOCIAL_POLL_GAP_SECONDS"] = "0"  # 测试不真等风控节流间隔
         # 独立 Redis db：否则和本机 dev 后端共用 db0，它写的风控冷却（TTL 长达 24h）
@@ -70,6 +72,41 @@ async def _clear_wechat_cooldown():
     await cooldown.clear()
     await weibo_cooldown.clear()
     yield
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clear_fund_arb_state(request):
+    """Fund-arb tests use canonical codes, so isolate DB and process state."""
+    from app.fund_arb.snapshot import get_store
+
+    if "fund_arb" not in request.node.nodeid:
+        yield
+        return
+
+    from sqlalchemy import delete
+
+    from app.core.db import get_sessionmaker
+    from app.fund_arb.models import (
+        FundArbDaily,
+        FundArbFactor,
+        FundArbFund,
+        FundArbReconciliation,
+        FundArbTrackingDaily,
+    )
+
+    async with get_sessionmaker()() as db:
+        for model in (
+            FundArbReconciliation,
+            FundArbFactor,
+            FundArbDaily,
+            FundArbTrackingDaily,
+            FundArbFund,
+        ):
+            await db.execute(delete(model))
+        await db.commit()
+    get_store().clear()
+    yield
+    get_store().clear()
 
 
 @pytest_asyncio.fixture

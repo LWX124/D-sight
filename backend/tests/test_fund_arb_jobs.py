@@ -6,8 +6,8 @@ from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.fund_arb import job as fund_job
-from app.fund_arb.fetchers import DatedPrice, FakeQuoteFetcher, NavRecord, Quote
-from app.fund_arb.job import evening_pipeline, is_market_open, morning_job, snapshot_tick
+from app.fund_arb.fetchers import FakeQuoteFetcher, NavRecord, Quote
+from app.fund_arb.job import evening_pipeline, is_market_open, snapshot_tick
 from app.fund_arb.models import FundArbDaily, FundArbFactor, FundArbFund, FundArbTrackingDaily
 
 SH = ZoneInfo("Asia/Shanghai")

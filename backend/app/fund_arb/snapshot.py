@@ -64,6 +64,16 @@ class SnapshotStore:
         if snaps:
             self.as_of = max(s.as_of for s in snaps)
 
+    def replace(self, snaps: list[FundSnapshot]) -> None:
+        """Atomically replace a full rebuild so disabled/stale funds disappear."""
+        self._snaps = {snapshot.fund_code: snapshot for snapshot in snaps}
+        self.as_of = max((snapshot.as_of for snapshot in snaps), default=None)
+
+    def clear(self) -> None:
+        """Reset process-local state, primarily for lifecycle and test isolation."""
+        self._snaps.clear()
+        self.as_of = None
+
     def rows(self, category: str | None = None) -> list[FundSnapshot]:
         out = [
             s for s in self._snaps.values()
@@ -280,7 +290,7 @@ async def rebuild_snapshots(session_factory, fetcher: QuoteFetcher,
             ))
         except Exception:
             _log.exception("fund_arb 估值失败：%s", fund.fund_code)
-    get_store().update(snaps)
+    get_store().replace(snaps)
     return ok
 
 
@@ -315,5 +325,5 @@ async def load_close_snapshots(session_factory) -> int:
             purchase_limit=status_row.purchase_limit if status_row else None,
             as_of=now, source="close",
         ))
-    get_store().update(snaps)
+    get_store().replace(snaps)
     return len(snaps)

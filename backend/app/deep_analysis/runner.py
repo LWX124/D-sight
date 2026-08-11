@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.credits.models import CreditAccount, CreditTransaction
+from app.credits.models import CreditTransaction
 from app.deep_analysis.models import DeepAnalysisReport
 
 STAGES = [

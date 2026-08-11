@@ -8,7 +8,7 @@ from app.social.wechat.errors import (
     TransientMpError,
     check_base_resp,
 )
-from app.social.wechat.parser import RawArticle, html_to_text, parse_appmsgpublish
+from app.social.wechat.parser import html_to_text, parse_appmsgpublish
 
 
 def test_check_base_resp_ok():

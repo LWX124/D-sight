@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     social_poll_gap_seconds: float = 5.0
     # 同一账号手动 refresh 的最小间隔（秒）
     social_refresh_cooldown_seconds: int = 60
+    # RedFox API Key
+    redfox_api_key: str = ""
+    # AIHot 公共榜单与异步金融解读。榜单热度不使用模型输出。
+    aihot_poll_minutes: int = 120
+    aihot_refresh_cooldown_seconds: int = 900
+    aihot_enrichment_model: str = "deepseek-v4-flash"
+    aihot_enrichment_batch_size: int = 20
+    aihot_enrichment_concurrency: int = 3
+    aihot_provider_call_cost: float = 0.04
+    aihot_monthly_budget: float = 100.0
+    social_unified_poll_minutes: int = 240
     # 微博使用独立的低频登录态采集链路，不与微信配额或冷却共享。
     weibo_poll_minutes: int = 60
     weibo_max_accounts: int = 20

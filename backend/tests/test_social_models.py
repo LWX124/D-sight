@@ -7,7 +7,6 @@ from app.social.models import (
     WechatAccount,
     WechatArticle,
     WechatCredential,
-    WechatSubscription,
 )
 
 

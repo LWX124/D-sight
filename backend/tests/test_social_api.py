@@ -7,7 +7,13 @@ from sqlalchemy import func, select
 from app.auth.models import User  # noqa: F401 — 注册 FK 目标表
 from app.core.security import create_access_token
 from app.social import crypto
-from app.social.models import WechatAccount, WechatArticle, WechatCredential, WechatSubscription
+from app.social.models import (
+    WechatAccount,
+    WechatArticle,
+    WechatCredential,
+    WechatSubscription,
+)
+from app.social.unified_models import SocialPublisher, SocialSubscription
 from app.social.wechat.errors import SessionExpiredError
 
 
@@ -35,6 +41,81 @@ async def test_subscribe_idempotent_and_list(client, db_session, registered_user
         select(func.count()).select_from(WechatAccount).where(WechatAccount.fakeid == body["fakeid"])
     )
     assert n == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_wechat_subscription_projects_feed_and_deletes_both_directions(
+    client, db_session, registered_user
+):
+    h = _auth(registered_user)
+    fakeid = f"SYNC{uuid.uuid4().hex[:8]}"
+    account = WechatAccount(fakeid=fakeid, name="统一公众号")
+    db_session.add(account)
+    await db_session.flush()
+    article = WechatArticle(
+        account_id=account.id,
+        external_id=f"legacy-{uuid.uuid4().hex}",
+        title="旧客户端也能看到",
+        url="https://mp.example.test/legacy",
+        published_at=dt.datetime.now(dt.UTC),
+    )
+    db_session.add(article)
+    await db_session.commit()
+
+    subscribed = await client.post(
+        "/api/social/wechat/subscriptions",
+        json={"fakeid": fakeid, "name": account.name, "avatar": None},
+        headers=h,
+    )
+    assert subscribed.status_code == 200
+    feed = await client.get("/api/social/feed", headers=h)
+    assert feed.status_code == 200
+    assert any(row["title"] == "旧客户端也能看到" for row in feed.json()["items"])
+
+    publisher = await db_session.scalar(
+        select(SocialPublisher).where(
+            SocialPublisher.platform == "wechat",
+            SocialPublisher.external_id == fakeid,
+        )
+    )
+    unified = await db_session.scalar(
+        select(SocialSubscription).where(
+            SocialSubscription.user_id == registered_user.id,
+            SocialSubscription.publisher_id == publisher.id,
+        )
+    )
+    removed_legacy = await client.delete(
+        f"/api/social/wechat/subscriptions/{subscribed.json()['id']}",
+        headers=h,
+    )
+    assert removed_legacy.status_code == 200
+    assert await db_session.scalar(
+        select(SocialSubscription).where(SocialSubscription.id == unified.id)
+    ) is None
+
+    subscribed_again = await client.post(
+        "/api/social/wechat/subscriptions",
+        json={"fakeid": fakeid, "name": account.name, "avatar": None},
+        headers=h,
+    )
+    assert subscribed_again.status_code == 200
+    unified = await db_session.scalar(
+        select(SocialSubscription).where(
+            SocialSubscription.user_id == registered_user.id,
+            SocialSubscription.publisher_id == publisher.id,
+        )
+    )
+    removed_unified = await client.delete(
+        f"/api/social/subscriptions/{unified.id}",
+        headers=h,
+    )
+    assert removed_unified.status_code == 200
+    assert await db_session.scalar(
+        select(WechatSubscription).where(
+            WechatSubscription.user_id == registered_user.id,
+            WechatSubscription.account_id == account.id,
+        )
+    ) is None
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,12 @@
-from app.fund_arb.snapshot import SnapshotStore, FundSnapshot
 import datetime as dt
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.fund_arb.reconciliation import reconcile_fund
+from app.fund_arb.snapshot import FundSnapshot, SnapshotStore
+from app.main import create_app
+
 
 def _make_snap(code: str, est: float) -> FundSnapshot:
     return FundSnapshot(
@@ -21,9 +28,6 @@ def test_update_est_nav_missing_code():
     store = SnapshotStore()
     store.update_est_nav("999999", 1.0)  # 不存在时静默忽略
 
-
-from app.fund_arb.reconciliation import ReconcileResult, reconcile_fund
-
 def test_reconcile_fund_no_action():
     r = reconcile_fund("513500", 1.2341, 1.2350, 0.01)
     assert r.action == "none"
@@ -39,11 +43,6 @@ def test_reconcile_fund_negative_deviation():
     r = reconcile_fund("513500", 1.2389, 1.2341, 0.003)
     assert r.action == "corrected"
     assert r.corrected_value == 1.2341
-
-
-from httpx import ASGITransport, AsyncClient
-from app.main import create_app
-import pytest
 
 @pytest.mark.anyio
 async def test_reconcile_endpoint_forbidden():

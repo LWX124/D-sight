@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/lib/auth";
@@ -10,11 +10,13 @@ import { DraftThreadComposer, Thread } from "@/chat/Thread";
 import { ThreadListSidebar, threadsKey, type Panel, type Thread as ThreadT } from "@/chat/ThreadListSidebar";
 import { KbMountSelector } from "@/chat/KbMountSelector";
 import { creditsKey, fetchCredits } from "@/lib/credits";
-import NewsPanel from "@/panels/NewsPanel";
-import SocialPanel from "@/panels/SocialPanel";
-import KbPanel from "@/panels/KbPanel";
-import SkillsPanel from "@/panels/SkillsPanel";
-import FundArbPanel from "@/panels/FundArbPanel";
+
+const NewsPanel = lazy(() => import("@/panels/NewsPanel"));
+const SocialPanel = lazy(() => import("@/panels/SocialPanel"));
+const AihotPanel = lazy(() => import("@/panels/social/AihotPanel"));
+const KbPanel = lazy(() => import("@/panels/KbPanel"));
+const SkillsPanel = lazy(() => import("@/panels/SkillsPanel"));
+const FundArbPanel = lazy(() => import("@/panels/FundArbPanel"));
 
 async function listThreads(): Promise<ThreadT[]> {
   const r = await apiFetch("/api/threads/");
@@ -22,9 +24,16 @@ async function listThreads(): Promise<ThreadT[]> {
   return r.json();
 }
 
+async function getCurrentUser(): Promise<{ role: string }> {
+  const response = await apiFetch("/api/auth/me");
+  if (!response.ok) throw new Error("加载用户信息失败");
+  return response.json();
+}
+
 const PANEL_TITLES: Record<Panel, string> = {
   chat: "对话",
   news: "7x24h",
+  aihot: "AIHot · 金融热榜",
   social: "社媒信息",
   kb: "知识库",
   skills: "技能市场",
@@ -47,6 +56,10 @@ export default function ChatPage() {
   const activeThreadId = isValidThreadId && threadId ? threadId : null;
 
   useQuery({ queryKey: threadsKey, queryFn: listThreads });
+  const { data: currentUser } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: getCurrentUser,
+  });
   const { data: credits } = useQuery({ queryKey: creditsKey, queryFn: fetchCredits });
   useEffect(() => {
     if (threadId && threadId !== "new" && !isValidThreadId) {
@@ -108,6 +121,11 @@ export default function ChatPage() {
     }
   }
 
+  async function startChatWithContent(message: string) {
+    setActivePanel("chat");
+    await onFirstSend(message);
+  }
+
   return (
     <div className="flex h-svh bg-background">
       <ThreadListSidebar
@@ -149,6 +167,7 @@ export default function ChatPage() {
           </div>
         )}
         <div className="min-h-0 flex-1 animate-fade-up" key={activePanel}>
+          <Suspense fallback={<PanelLoading />}>
           {activePanel === "chat" && (
             <>
               {!isDraft && isValidThreadId ? (
@@ -186,12 +205,33 @@ export default function ChatPage() {
             </>
           )}
           {activePanel === "news" && <NewsPanel />}
-          {activePanel === "social" && <SocialPanel />}
+          {activePanel === "aihot" && (
+            <AihotPanel
+              canRefresh={currentUser?.role === "admin"}
+              onSendToChat={startChatWithContent}
+              onDeepAnalysis={startChatWithContent}
+            />
+          )}
+          {activePanel === "social" && (
+            <SocialPanel
+              onSendToChat={startChatWithContent}
+              onDeepAnalysis={startChatWithContent}
+            />
+          )}
           {activePanel === "kb" && <KbPanel />}
           {activePanel === "skills" && <SkillsPanel />}
           {activePanel === "fund_arb" && <FundArbPanel />}
+          </Suspense>
         </div>
       </main>
+    </div>
+  );
+}
+
+function PanelLoading() {
+  return (
+    <div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      正在加载面板…
     </div>
   );
 }

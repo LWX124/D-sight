@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
 }));
 vi.mock("@/lib/auth", () => ({ logout: vi.fn() }));
+vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 vi.mock("@/chat/ThreadListSidebar", () => ({
   threadsKey: ["threads"],
   ThreadListSidebar: () => <aside />,

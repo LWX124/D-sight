@@ -16,6 +16,7 @@ from app.news.router import router as news_router
 from app.skills.router import router as skills_router
 from app.social.router import router as social_router
 from app.fund_arb.router import router as fund_arb_router
+from app.aihot.router import router as aihot_router
 from app.threads.router import router as threads_router
 from app.deep_analysis.router import router as deep_analysis_router
 
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(kb_router)
     app.include_router(news_router)
     app.include_router(social_router)
+    app.include_router(aihot_router)
     app.include_router(fund_arb_router)
     app.include_router(deep_analysis_router)
     return app

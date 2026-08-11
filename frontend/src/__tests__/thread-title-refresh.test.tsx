@@ -1,7 +1,7 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChatPage from "@/pages/ChatPage";
@@ -15,6 +15,7 @@ let capturedOnFinish: (() => void) | null = null;
 
 vi.mock("@/lib/api", () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 vi.mock("@/lib/auth", () => ({ logout: vi.fn() }));
+vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 vi.mock("@/chat/RuntimeProvider", () => ({
   RuntimeProvider: ({
     children,
@@ -99,7 +100,7 @@ describe("会话标题刷新", () => {
     await screen.findByText("新对话");
 
     // 模拟后端返回 200 响应头：此时标题已在后端 commit
-    capturedOnSendResponse?.(200);
+    act(() => capturedOnSendResponse?.(200));
 
     expect(await screen.findByText("分析贵州茅台的护城河")).toBeInTheDocument();
   });
@@ -109,7 +110,7 @@ describe("会话标题刷新", () => {
     await screen.findByText("新对话");
     const before = apiFetch.mock.calls.filter(([p]) => p === "/api/threads/").length;
 
-    capturedOnSendResponse?.(402);
+    act(() => capturedOnSendResponse?.(402));
 
     expect(await screen.findByTestId("credit-notice")).toBeInTheDocument();
     await waitFor(() => {
@@ -123,7 +124,7 @@ describe("会话标题刷新", () => {
     await screen.findByText("新对话");
     const before = apiFetch.mock.calls.filter(([p]) => p === "/api/threads/").length;
 
-    capturedOnFinish?.();
+    act(() => capturedOnFinish?.());
 
     await waitFor(() => {
       const after = apiFetch.mock.calls.filter(([p]) => p === "/api/threads/").length;

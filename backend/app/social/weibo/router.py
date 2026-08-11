@@ -11,6 +11,12 @@ from app.auth.models import User
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.social.models import WeiboAccount, WeiboCredential, WeiboPost, WeiboSubscription
+from app.social.providers.weibo import WeiboProvider
+from app.social.refresh import project_weibo_posts
+from app.social.subscription_sync import (
+    delete_legacy_subscription_pair,
+    ensure_unified_subscription,
+)
 from app.social.weibo import cooldown
 from app.social.weibo.credentials import (
     disable_credential,
@@ -241,11 +247,15 @@ async def subscribe(
         db.add(sub)
     else:
         sub.enabled = True
-    # Keep the new subscription and its initial snapshots in one transaction.
-    # ingest_account commits on success; on an upstream failure mark_account_error
-    # rolls this transaction back before persisting only the account error state.
-    # Committing here would leave a subscription behind after a 409/429/503, and
-    # the idempotent retry would then skip the initial sync forever.
+    publisher, _ = await ensure_unified_subscription(
+        db,
+        user.id,
+        WeiboProvider.from_weibo_profile(account),
+    )
+    # Keep the legacy + unified subscriptions, initial snapshots, and unified
+    # item projection in one transaction. ``commit=False`` below leaves the
+    # success commit to this route; on an upstream failure mark_account_error
+    # rolls the whole transaction back before persisting only account error state.
     await db.flush()
 
     added = 0
@@ -254,11 +264,20 @@ async def subscribe(
         left = await cooldown.remaining()
         if left:
             sync_status = "cooldown"
+            await project_weibo_posts(db, publisher, account, get_settings())
             await db.commit()
         else:
             credential = await _active_or_409(db)
             try:
-                added = await ingest_account(db, account, credential, initial=True)
+                added = await ingest_account(
+                    db,
+                    account,
+                    credential,
+                    initial=True,
+                    commit=False,
+                )
+                await project_weibo_posts(db, publisher, account, get_settings())
+                await db.commit()
                 sync_status = "ok"
             except (
                 WeiboSessionExpiredError,
@@ -269,6 +288,7 @@ async def subscribe(
                 await mark_account_error(db, account.id, str(exc))
                 raise await _handle_upstream(db, exc)
     else:
+        await project_weibo_posts(db, publisher, account, get_settings())
         await db.commit()
     await db.refresh(sub)
     return SubscribeResult(
@@ -305,7 +325,17 @@ async def unsubscribe(
     sub = await db.get(WeiboSubscription, subscription_id)
     if sub is None or sub.user_id != user.id:
         raise HTTPException(404, "微博订阅不存在")
-    await db.delete(sub)
+    account = await db.get(WeiboAccount, sub.account_id)
+    if account is None:
+        await db.delete(sub)
+    else:
+        await delete_legacy_subscription_pair(
+            db,
+            user_id=user.id,
+            platform="weibo",
+            external_id=account.uid,
+            legacy_subscription=sub,
+        )
     await db.commit()
     return {"ok": True}
 

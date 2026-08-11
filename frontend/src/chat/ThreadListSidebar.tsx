@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Library, MessageSquare, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
+import { BarChart3, Flame, Library, MessageSquare, Newspaper, Pencil, Plus, Store, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ export type Thread = {
   updated_at: string;
 };
 
-export type Panel = "chat" | "news" | "social" | "kb" | "skills" | "fund_arb";
+export type Panel = "chat" | "news" | "aihot" | "social" | "kb" | "skills" | "fund_arb";
 
 export const threadsKey = ["threads"] as const;
 
@@ -39,6 +39,7 @@ async function deleteThread(id: string): Promise<void> {
 const NAV_ITEMS: { panel: Panel; icon: typeof MessageSquare; label: string; testId: string }[] = [
   { panel: "chat", icon: MessageSquare, label: "对话", testId: "nav-chat" },
   { panel: "news", icon: Newspaper, label: "7x24h", testId: "nav-news" },
+  { panel: "aihot", icon: Flame, label: "AIHot", testId: "nav-aihot" },
   { panel: "social", icon: Newspaper, label: "社媒信息", testId: "nav-social" },
   { panel: "kb", icon: Library, label: "知识库", testId: "nav-kb" },
   { panel: "skills", icon: Store, label: "技能市场", testId: "nav-skills" },

@@ -8,15 +8,24 @@ from app.social.wechat.client import ActiveCred, appmsg_publish, fetch_article_t
 
 
 async def get_or_create_account(
-    db: AsyncSession, fakeid: str, name: str, avatar: str | None = None, signature: str | None = None
+    db: AsyncSession,
+    fakeid: str,
+    name: str,
+    avatar: str | None = None,
+    signature: str | None = None,
+    *,
+    commit: bool = True,
 ) -> WechatAccount:
     acc = await db.scalar(select(WechatAccount).where(WechatAccount.fakeid == fakeid))
     if acc is not None:
         return acc
     acc = WechatAccount(fakeid=fakeid, name=name, avatar=avatar, signature=signature)
     db.add(acc)
-    await db.commit()
-    await db.refresh(acc)
+    if commit:
+        await db.commit()
+        await db.refresh(acc)
+    else:
+        await db.flush()
     return acc
 
 
