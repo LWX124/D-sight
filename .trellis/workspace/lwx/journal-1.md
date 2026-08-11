@@ -26,3 +26,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: AIHot 与统一社媒重构
+
+**Date**: 2026-08-11
+**Task**: AIHot 与统一社媒重构
+**Branch**: `main`
+
+### Summary
+
+完成统一社媒 Feed、AIHot 金融热榜、Provider 审计、订阅一致性、管理员信源管理、性能优化及全量验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `179382a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
