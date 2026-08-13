@@ -92,10 +92,7 @@ async def _refresh_for_user(
         raise HTTPException(404, "发布者不存在")
 
     acquired_db = await db.scalar(
-        text(
-            "SELECT pg_try_advisory_xact_lock("
-            "hashtextextended(:publisher_id, 0))"
-        ),
+        text("SELECT pg_try_advisory_xact_lock(hashtextextended(:publisher_id, 0))"),
         {"publisher_id": str(publisher_id)},
     )
     if not acquired_db:
@@ -330,13 +327,13 @@ async def get_item_detail(
     except ValueError:
         provider = None
     try:
-        await get_body_text(db, item, provider=provider)
+        effective_body_text = await get_body_text(db, item, provider=provider)
         await db.commit()
     finally:
         if isinstance(provider, RedFoxProvider):
             await provider.aclose()
     return FeedItemDetailOut(
         **serialize_feed_item(item, publisher),
-        body_text=item.body_text,
+        body_text=effective_body_text,
         transcript_text=item.transcript_text,
     )

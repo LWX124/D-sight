@@ -35,6 +35,14 @@ function getAssets(item: ContentPreview | ContentDetail): string[] {
   return [];
 }
 
+function getParagraphs(body: string): string[] {
+  return body
+    .trim()
+    .split(/\n[\t ]*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 function isAihotDetail(item: ContentPreview | ContentDetail): item is AihotItemDetail {
   return "rank_history" in item && Array.isArray(item.rank_history);
 }
@@ -239,9 +247,19 @@ export default function ContentDetailDrawer({
             </div>
           )}
 
-          <div className="mt-6 whitespace-pre-wrap text-sm leading-7 text-foreground/90">
-            {body || "正文尚未抓取，可通过原文入口查看完整内容。"}
-          </div>
+          {body ? (
+            <article aria-label="正文" className="mt-6 space-y-4 text-sm leading-7 text-foreground/90">
+              {getParagraphs(body).map((paragraph, index) => (
+                <p key={`${index}-${paragraph.slice(0, 24)}`} className="whitespace-pre-line">
+                  {paragraph}
+                </p>
+              ))}
+            </article>
+          ) : (
+            <p className="mt-6 text-sm leading-7 text-foreground/90">
+              正文尚未抓取，可通过原文入口查看完整内容。
+            </p>
+          )}
         </div>
 
         <footer className="shrink-0 border-t bg-card px-4 py-3">

@@ -1,7 +1,9 @@
 import httpx
 import pytest
 
+from app.social.providers.base import ItemDTO
 from app.social.providers.redfox import RedFoxProvider
+from app.social.providers.wechat_mp import WechatMpProvider
 
 
 @pytest.mark.asyncio
@@ -75,4 +77,74 @@ async def test_redfox_xiaohongshu_publisher_items_is_not_silent():
         await provider.fetch_publisher_items(
             PublisherDTO(platform="xiaohongshu", external_id="u1", name="user")
         )
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_redfox_wechat_detail_uses_verified_url_endpoint_and_maps_content():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "code": 2000,
+                "data": {
+                    "content": "RedFox 返回的公众号正文       第二段\n第二段补充",
+                },
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = RedFoxProvider("test-key", client=client, base_url="https://redfox.test")
+    source = ItemDTO(
+        platform="wechat",
+        external_id="article-1",
+        content_type="article",
+        title="文章标题",
+        url="https://mp.weixin.qq.com/s/verified-article",
+    )
+
+    detail = await provider.fetch_item_detail(source)
+
+    assert len(requests) == 1
+    assert requests[0].url.path == "/story/api/gzhData/queryArticleDetail"
+    assert requests[0].headers["REDFOX_API_KEY"] == "test-key"
+    assert requests[0].method == "POST"
+    assert requests[0].read() == (b'{"url":"https://mp.weixin.qq.com/s/verified-article"}')
+    assert detail.platform == source.platform
+    assert detail.external_id == source.external_id
+    assert detail.content_type == source.content_type
+    assert detail.url == source.url
+    assert detail.body_text == "RedFox 返回的公众号正文\n\n第二段\n第二段补充"
+    assert provider.capabilities("wechat")["detail"] is True
+    assert WechatMpProvider().capabilities("wechat")["detail"] is False
+    raw_records = provider.drain_raw_records()
+    assert raw_records[0]["operation"] == "/story/api/gzhData/queryArticleDetail"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_redfox_wechat_detail_rejects_untrusted_url_before_http_request():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(500)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = RedFoxProvider("test-key", client=client)
+
+    with pytest.raises(ValueError, match="allowed article URL"):
+        await provider.fetch_item_detail(
+            ItemDTO(
+                platform="wechat",
+                external_id="article-1",
+                content_type="article",
+                url="https://mp.weixin.qq.com.evil.test/s/article-1",
+            )
+        )
+
+    assert requests == []
     await client.aclose()

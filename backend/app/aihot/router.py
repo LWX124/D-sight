@@ -299,9 +299,7 @@ async def refresh_aihot(
 
 
 @router.get("/sources")
-async def list_sources(
-    admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def list_sources(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     rows = (
         await db.execute(
             select(HotSourceMembership, SocialPublisher)
@@ -467,10 +465,7 @@ async def update_source(
         raise HTTPException(422, "category 和 enabled 不能为 null")
     if membership.publisher_id is not None and updates.get("source_key") is not None:
         raise HTTPException(422, "账号源不使用 source_key")
-    if (
-        membership.publisher_id is None
-        and updates.get("source_key", membership.source_key) is None
-    ):
+    if membership.publisher_id is None and updates.get("source_key", membership.source_key) is None:
         raise HTTPException(422, "关键词源不能清空 source_key")
     for field, value in updates.items():
         setattr(membership, field, value)
@@ -543,7 +538,7 @@ async def get_aihot_item(
     except ValueError:
         provider = None
     try:
-        await get_body_text(db, item, provider=provider)
+        effective_body_text = await get_body_text(db, item, provider=provider)
         await db.commit()
     finally:
         if isinstance(provider, RedFoxProvider):
@@ -583,7 +578,7 @@ async def get_aihot_item(
         "content_type": item.content_type,
         "title": item.title,
         "digest": item.digest,
-        "body_text": item.body_text,
+        "body_text": effective_body_text,
         "transcript_text": item.transcript_text,
         "cover_url": item.cover_url,
         "url": item.url,

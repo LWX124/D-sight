@@ -1,19 +1,23 @@
 """RedFox Provider 实现。
 
 基于 Phase 0 门禁确认的 API 路径：
-- 公众号: /story/api/gzhData/searchUser, /story/api/gzhData/queryWorkList
+- 公众号: /story/api/gzhData/searchUser, /story/api/gzhData/queryWorkList,
+  /story/api/gzhData/queryArticleDetail
 - 小红书: /story/api/xhsUser/searchUser, /story/api/xhsUser/searchArticle, /story/api/xhsUser/queryWorkDetail
 - B站:   /story/api/bili/data/accountSearch, /story/api/bili/data/accountWorkList
 
 所有接口均为 POST，认证头 REDFOX_API_KEY。
 """
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from app.social.providers.base import ItemDTO, MetricsDTO, PublisherDTO, SocialProvider
+from app.social.wechat.parser import html_to_text
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,7 @@ _ITEM_LIST_PATHS = {
 
 # 各平台获取作品详情的 API 路径（None = 列表已包含详情）
 _ITEM_DETAIL_PATHS = {
-    "wechat": None,
+    "wechat": "/story/api/gzhData/queryArticleDetail",
     "xiaohongshu": "/story/api/xhsUser/queryWorkDetail",
     "bilibili": None,
 }
@@ -45,7 +49,7 @@ _CAPABILITIES = {
         "account_item_list": True,
         "publisher_search": True,
         "item_search": False,
-        "detail": False,
+        "detail": True,
         "vertical_hot_feed": False,
     },
     "xiaohongshu": {
@@ -64,6 +68,24 @@ _CAPABILITIES = {
         "vertical_hot_feed": False,
     },
 }
+
+
+def is_allowed_wechat_article_url(url: str | None) -> bool:
+    """Accept only an unambiguous URL on the exact HTTPS WeChat article origin."""
+    if not url or url != url.strip() or any(ord(char) < 32 or ord(char) == 127 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == "https"
+        and parsed.hostname == "mp.weixin.qq.com"
+        and port in (None, 443)
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 class RedFoxProvider(SocialProvider):
@@ -110,9 +132,7 @@ class RedFoxProvider(SocialProvider):
         resp.raise_for_status()
         result = resp.json()
         if isinstance(result, dict):
-            self._raw_records.append(
-                {"platform": platform, "operation": path, "payload": result}
-            )
+            self._raw_records.append({"platform": platform, "operation": path, "payload": result})
         if not isinstance(result, dict) or result.get("code") != 2000:
             message = result.get("msg", "unknown") if isinstance(result, dict) else "invalid JSON"
             raise RuntimeError(f"RedFox API error: {message}")
@@ -337,7 +357,9 @@ class RedFoxProvider(SocialProvider):
                 title=raw.get("title"),
                 body_text=raw.get("description"),
                 cover_url=raw.get("picUrl"),
-                url=f"https://www.bilibili.com/video/{raw.get('bvId')}" if raw.get("bvId") else None,
+                url=f"https://www.bilibili.com/video/{raw.get('bvId')}"
+                if raw.get("bvId")
+                else None,
                 published_at=published_at,
                 platform_metadata={
                     "author": raw.get("author"),
@@ -366,10 +388,27 @@ class RedFoxProvider(SocialProvider):
         if not path:
             return item  # 详情已包含在列表中
 
-        if item.platform == "xiaohongshu":
-            data = await self._post(
-                path, {"workId": item.external_id}, platform=item.platform
+        if item.platform == "wechat":
+            if not is_allowed_wechat_article_url(item.url):
+                raise ValueError("WeChat article detail requires an allowed article URL")
+            data = await self._post(path, {"url": item.url}, platform=item.platform)
+            content = data.get("content")
+            return ItemDTO(
+                platform=item.platform,
+                external_id=item.external_id,
+                content_type=item.content_type,
+                title=item.title,
+                body_text=html_to_text(content) if isinstance(content, str) else None,
+                digest=item.digest,
+                cover_url=item.cover_url,
+                url=item.url,
+                published_at=item.published_at,
+                platform_metadata=item.platform_metadata,
+                metrics=item.metrics,
             )
+
+        if item.platform == "xiaohongshu":
+            data = await self._post(path, {"workId": item.external_id}, platform=item.platform)
             return self._map_item("xiaohongshu", data)
 
         return item
