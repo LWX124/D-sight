@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     aihot_provider_call_cost: float = 0.04
     aihot_monthly_budget: float = 100.0
     social_unified_poll_minutes: int = 240
+    # Public SaaS WeChat fallback. Disabled until platform credentials are ready.
+    social_wechat_fallback_enabled: bool = False
+    social_wechat_fallback_capacity: int = 100
+    social_wechat_daily_request_budget: int = 50
+    social_wechat_dispatch_minutes: int = 10
     # 微博使用独立的低频登录态采集链路，不与微信配额或冷却共享。
     weibo_poll_minutes: int = 60
     weibo_max_accounts: int = 20

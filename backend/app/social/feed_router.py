@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import uuid
-import logging
-from datetime import datetime, timezone
 
-import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, select, text
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -16,15 +13,17 @@ from app.auth.models import User
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.social.body_fetch import get_body_text
+from app.social.identity import ensure_publisher_identity
 from app.social.provider_audit import audited_provider_call, provider_audit_name
 from app.social.providers import PublisherDTO, get_provider
 from app.social.providers.redfox import RedFoxProvider
-from app.social.refresh import refresh_publisher
+from app.social.refresh import enqueue_publisher_refresh
 from app.social.schemas import (
     FeedItemDetailOut,
     FeedItemOut,
     FeedPageOut,
     PublisherSearchOut,
+    PublisherRefreshOut,
     UnifiedSubscribeIn,
     UnifiedSubscriptionOut,
 )
@@ -43,15 +42,12 @@ from app.social.unified import (
 from app.social.unified_models import SocialPublisher, SocialSubscription
 
 router = APIRouter(tags=["social-feed"])
-_REFRESH_COOLDOWN_SECONDS = 15 * 60
-logger = logging.getLogger(__name__)
 
 
-async def _release_refresh_cooldown(redis, key: str) -> None:
-    try:
-        await redis.delete(key)
-    except Exception as exc:
-        logger.warning("social refresh cooldown release failed: %s", exc)
+def _public_external_id(publisher: SocialPublisher) -> str:
+    """Legacy WeChat fakeids are platform credentials, not a public API field."""
+
+    return "" if publisher.provider == "wechat_mp" else publisher.external_id
 
 
 @router.get("/feed", response_model=FeedPageOut)
@@ -77,7 +73,7 @@ async def _refresh_for_user(
     publisher_id: uuid.UUID,
     user: User,
     db: AsyncSession,
-) -> dict:
+) -> PublisherRefreshOut:
     subscription = await db.scalar(
         select(SocialSubscription).where(
             SocialSubscription.user_id == user.id,
@@ -91,74 +87,40 @@ async def _refresh_for_user(
     if publisher is None:
         raise HTTPException(404, "发布者不存在")
 
-    acquired_db = await db.scalar(
-        text("SELECT pg_try_advisory_xact_lock(hashtextextended(:publisher_id, 0))"),
-        {"publisher_id": str(publisher_id)},
+    queued = await enqueue_publisher_refresh(db, publisher)
+    return PublisherRefreshOut(
+        state=queued["state"],
+        publisher_id=queued["publisher_id"],
+        next_sync_at=(
+            queued["next_sync_at"].isoformat() if queued["next_sync_at"] else None
+        ),
     )
-    if not acquired_db:
-        raise HTTPException(409, "该发布者正在刷新，请稍后再试")
-
-    settings = get_settings()
-    redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    cooldown_key = f"social:refresh:publisher:{publisher_id}"
-    try:
-        try:
-            acquired = await redis.set(
-                cooldown_key,
-                "1",
-                ex=_REFRESH_COOLDOWN_SECONDS,
-                nx=True,
-            )
-        except Exception as exc:  # DB advisory lock remains the correctness boundary
-            logger.warning("social refresh cooldown unavailable; fail-open: %s", exc)
-            acquired = True
-        if not acquired:
-            ttl = max(1, await redis.ttl(cooldown_key))
-            raise HTTPException(
-                429,
-                f"该发布者刚刷新过，请 {ttl} 秒后再试",
-                headers={"Retry-After": str(ttl)},
-            )
-        try:
-            fetched = await refresh_publisher(db, publisher, settings)
-            publisher.last_synced_at = datetime.now(timezone.utc)
-            publisher.last_sync_status = "ok"
-            publisher.last_sync_error = None
-            await db.commit()
-        except NotImplementedError as exc:
-            await db.rollback()
-            await _release_refresh_cooldown(redis, cooldown_key)
-            raise HTTPException(422, str(exc)) from exc
-        except LookupError as exc:
-            await db.rollback()
-            await _release_refresh_cooldown(redis, cooldown_key)
-            raise HTTPException(409, str(exc)) from exc
-        except HTTPException:
-            raise
-        except Exception as exc:
-            await db.rollback()
-            await _release_refresh_cooldown(redis, cooldown_key)
-            raise HTTPException(503, "发布者刷新失败，请稍后重试") from exc
-    finally:
-        await redis.aclose()
-    return {"ok": True, "publisher_id": str(publisher_id), "fetched": fetched}
 
 
-@router.post("/publishers/{publisher_id}/refresh")
+@router.post(
+    "/publishers/{publisher_id}/refresh",
+    response_model=PublisherRefreshOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def refresh_publisher_route(
     publisher_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PublisherRefreshOut:
     return await _refresh_for_user(publisher_id, user, db)
 
 
-@router.post("/feed/refresh", include_in_schema=False)
+@router.post(
+    "/feed/refresh",
+    include_in_schema=False,
+    response_model=PublisherRefreshOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def refresh_feed_compat(
     publisher_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PublisherRefreshOut:
     return await _refresh_for_user(publisher_id, user, db)
 
 
@@ -180,10 +142,17 @@ async def list_unified_subscriptions(
             id=str(subscription.id),
             publisher_id=str(publisher.id),
             platform=publisher.platform,
-            external_id=publisher.external_id,
+            external_id=_public_external_id(publisher),
             name=publisher.name,
             avatar=publisher.avatar,
             enabled=subscription.enabled,
+            provider=publisher.provider,
+            sync_state=publisher.sync_state,
+            sync_provider=publisher.sync_provider,
+            last_synced_at=(publisher.last_synced_at.isoformat() if publisher.last_synced_at else None),
+            last_sync_error_code=publisher.last_sync_error_code,
+            last_sync_error=publisher.last_sync_error,
+            next_sync_at=(publisher.next_sync_at.isoformat() if publisher.next_sync_at else None),
         )
         for subscription, publisher in rows
     ]
@@ -203,6 +172,7 @@ async def add_unified_subscription(
             "platform": body.platform,
             "external_id": body.external_id,
             "name": body.name,
+            "provider": body.provider,
         }
         for field, value in supplied.items():
             if value is not None and value != getattr(publisher, field):
@@ -218,6 +188,7 @@ async def add_unified_subscription(
                     external_id=body.external_id,
                     name=body.name,
                     avatar=body.avatar,
+                    provider=body.provider or "",
                 ),
             )
 
@@ -226,6 +197,25 @@ async def add_unified_subscription(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     capabilities = provider.capabilities(publisher.platform)
+    provider_name = provider_audit_name(provider)
+    if publisher.platform == "wechat" and provider_name == "wechat_mp":
+        raise HTTPException(422, "统一订阅仅接受 RedFox 搜索结果；微信补缺由平台调度")
+    if publisher.provider and publisher.provider != provider_name:
+        if isinstance(provider, RedFoxProvider):
+            await provider.aclose()
+        raise HTTPException(422, "发布者已绑定的 provider 当前不可用")
+    if body.provider is not None and body.provider != provider_name:
+        if isinstance(provider, RedFoxProvider):
+            await provider.aclose()
+        raise HTTPException(422, "provider 与当前可用采集源不匹配")
+    if not publisher.provider:
+        publisher.provider = provider_name
+    await ensure_publisher_identity(
+        db,
+        publisher,
+        provider=publisher.provider,
+        external_id=publisher.external_id,
+    )
     if isinstance(provider, RedFoxProvider):
         await provider.aclose()
     if not capabilities.get("account_item_list"):
@@ -238,10 +228,17 @@ async def add_unified_subscription(
         id=str(subscription.id),
         publisher_id=str(publisher.id),
         platform=publisher.platform,
-        external_id=publisher.external_id,
+        external_id=_public_external_id(publisher),
         name=publisher.name,
         avatar=publisher.avatar,
         enabled=subscription.enabled,
+        provider=publisher.provider,
+        sync_state=publisher.sync_state,
+        sync_provider=publisher.sync_provider,
+        last_synced_at=(publisher.last_synced_at.isoformat() if publisher.last_synced_at else None),
+        last_sync_error_code=publisher.last_sync_error_code,
+        last_sync_error=publisher.last_sync_error,
+        next_sync_at=(publisher.next_sync_at.isoformat() if publisher.next_sync_at else None),
     )
 
 

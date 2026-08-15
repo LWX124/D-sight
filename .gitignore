@@ -5,6 +5,7 @@ node_modules/
 .gstack/
 .playwright-mcp/
 .claude/worktrees/
+.trellis/
 
 # OS / 编辑器
 .DS_Store

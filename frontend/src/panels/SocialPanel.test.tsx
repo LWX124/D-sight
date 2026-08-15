@@ -33,6 +33,13 @@ const subscription = {
   name: "价值研究所",
   avatar: null,
   enabled: true,
+  provider: "redfox",
+  sync_state: "ok",
+  sync_provider: "redfox",
+  last_synced_at: "2026-08-11T03:00:00Z",
+  last_sync_error_code: null,
+  last_sync_error: null,
+  next_sync_at: "2026-08-11T07:00:00Z",
 };
 
 const item = {
@@ -81,7 +88,9 @@ describe("SocialPanel 统一订阅动态", () => {
     social.searchPublishers.mockResolvedValue([]);
     social.addUnifiedSubscription.mockResolvedValue(subscription);
     social.removeUnifiedSubscription.mockResolvedValue(undefined);
-    social.refreshPublisher.mockResolvedValue({ ok: true });
+    social.refreshPublisher.mockResolvedValue({
+      state: "queued", publisher_id: "publisher-1", next_sync_at: "2026-08-11T04:00:00Z",
+    });
     social.addBookmark.mockResolvedValue({ id: "bookmark-1" });
     social.removeBookmark.mockResolvedValue(undefined);
     social.getSocialItemDetail.mockResolvedValue({
@@ -232,62 +241,32 @@ describe("SocialPanel 统一订阅动态", () => {
     expect(await screen.findByText(/微博订阅已接入/)).toBeTruthy();
   });
 
-  it("微信 RedFox 不可用时可走扫码凭据备用搜索入口", async () => {
-    social.searchAccounts.mockResolvedValueOnce([{
-      fakeid: "legacy-wx-1",
-      nickname: "备用公众号",
-      avatar: null,
-      signature: "长期研究",
-    }]);
+  it("普通用户不显示微信扫码或凭证管理入口", async () => {
     const { default: SocialPanel } = await import("./SocialPanel");
     render(<SocialPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: /扫码备用/ }));
-    fireEvent.change(await screen.findByLabelText("备用搜索公众号"), { target: { value: "研究" } });
-    fireEvent.click(screen.getByRole("button", { name: "备用搜索" }));
-    expect(await screen.findByText("备用公众号")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "接入" }));
-
-    await waitFor(() => expect(social.subscribe).toHaveBeenCalledWith({
-      fakeid: "legacy-wx-1",
-      name: "备用公众号",
-      avatar: null,
-    }));
-    expect(social.addUnifiedSubscription).not.toHaveBeenCalled();
-    expect(await screen.findByText(/已通过扫码备用链路接入/)).toBeTruthy();
+    await screen.findByText("利率变化与市场定价");
+    expect(screen.queryByText(/扫码备用/)).toBeNull();
+    expect(screen.queryByText(/生成登录二维码/)).toBeNull();
+    expect(social.listCredentials).not.toHaveBeenCalled();
   });
 
-  it("微信备用入口可生成二维码并显示终态", async () => {
+  it("管理员可以维护平台托管的公众号凭证", async () => {
     const { default: SocialPanel } = await import("./SocialPanel");
-    render(<SocialPanel />);
+    render(<SocialPanel canManageCredentials />);
 
-    fireEvent.click(screen.getByRole("button", { name: /扫码备用/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "生成登录二维码" }));
-
-    expect(await screen.findByRole("img", { name: "公众号登录二维码" })).toBeTruthy();
-    expect(await screen.findByText("二维码已过期，请重新生成")).toBeTruthy();
-    expect(social.startLoginQrcode).toHaveBeenCalledTimes(1);
-    expect(social.pollLoginStatus).toHaveBeenCalledWith("login-1");
+    expect(await screen.findByText("公众号平台凭证管理")).toBeTruthy();
+    await waitFor(() => expect(social.listCredentials).toHaveBeenCalledTimes(1));
   });
 
-  it("legacy 原子订阅失败会显式展示，且不会补发 unified 请求", async () => {
-    social.searchAccounts.mockResolvedValueOnce([{
-      fakeid: "legacy-wx-2",
-      nickname: "失败公众号",
-      avatar: null,
-      signature: null,
-    }]);
-    social.subscribe.mockRejectedValueOnce(new Error("订阅事务失败"));
+  it("手动刷新只提示已加入队列，不等待上游抓取", async () => {
     const { default: SocialPanel } = await import("./SocialPanel");
     render(<SocialPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: /扫码备用/ }));
-    fireEvent.change(await screen.findByLabelText("备用搜索公众号"), { target: { value: "失败" } });
-    fireEvent.click(screen.getByRole("button", { name: "备用搜索" }));
-    fireEvent.click(await screen.findByRole("button", { name: "接入" }));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("订阅事务失败");
-    expect(social.addUnifiedSubscription).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { pressed: false, name: /价值研究所/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "刷新账号" }));
+    expect(await screen.findByText(/已加入刷新队列/)).toBeTruthy();
+    expect(social.refreshPublisher).toHaveBeenCalledWith("publisher-1");
   });
 
   it("小红书账号订阅能力缺失时明确降级，不伪装成功", async () => {

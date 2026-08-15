@@ -244,11 +244,11 @@ export function WechatFallbackEntry({ onIntegrated, onError }: SourceEntryProps)
   }
 
   return (
-    <section className="mt-3 rounded-lg border bg-muted/20 p-3" aria-label="公众号扫码备用入口">
+    <section className="mt-3 rounded-lg border bg-muted/20 p-3" aria-label="公众号平台凭证管理">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2 text-sm font-medium"><QrCode className="size-4" />公众号扫码备用入口</div>
-          <p className="mt-1 text-xs text-muted-foreground">RedFox 搜索不可用时，用公众号后台扫码登录后搜索账号。</p>
+          <div className="flex items-center gap-2 text-sm font-medium"><QrCode className="size-4" />公众号平台凭证管理</div>
+          <p className="mt-1 text-xs text-muted-foreground">仅管理员维护平台托管凭证和旧直连账号。</p>
         </div>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void startLogin()}>
           生成登录二维码

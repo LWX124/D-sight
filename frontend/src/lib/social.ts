@@ -190,8 +190,15 @@ export type FeedItem = {
 };
 export type UnifiedSubscription = {
   id: string; publisher_id: string; platform: string; external_id: string;
-  name: string; avatar: string | null; enabled: boolean;
+  name: string; avatar: string | null; enabled: boolean; provider: string | null;
+  sync_state: SocialSyncState; sync_provider: string | null;
+  last_synced_at: string | null; last_sync_error_code: string | null;
+  last_sync_error: string | null; next_sync_at: string | null;
 };
+export type SocialSyncState =
+  | "ok" | "queued" | "waiting_capacity" | "resolving_identity"
+  | "identity_unresolved" | "identity_ambiguous" | "rate_limited"
+  | "credential_unavailable" | "upstream_error";
 export type PublisherSearchResult = {
   platform: string; external_id: string; name: string;
   avatar: string | null; description: string | null; provider: string;
@@ -217,7 +224,9 @@ export async function getFeed(params: {
   return json(await apiFetch(`/api/social/feed?${qs}`));
 }
 
-export async function refreshPublisher(publisherId: string): Promise<{ ok: boolean; message?: string }> {
+export async function refreshPublisher(publisherId: string): Promise<{
+  state: SocialSyncState; publisher_id: string; next_sync_at: string | null;
+}> {
   return json(await apiFetch(`/api/social/publishers/${encodeURIComponent(publisherId)}/refresh`, {
     method: "POST",
   }));
@@ -229,6 +238,7 @@ export async function listUnifiedSubscriptions(): Promise<UnifiedSubscription[]>
 
 export async function addUnifiedSubscription(data: {
   publisher_id?: string; platform?: string; external_id?: string; name?: string; avatar?: string;
+  provider?: string;
 }): Promise<UnifiedSubscription> {
   return json(await apiFetch("/api/social/subscriptions", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),

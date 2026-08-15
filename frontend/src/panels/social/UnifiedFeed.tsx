@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Bookmark, Plus, QrCode, RefreshCw, Search, X } from "lucide-react";
+import { Bookmark, Plus, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +34,20 @@ const PLATFORM_LABELS: Record<string, string> = Object.fromEntries(
   PLATFORMS.map(({ key, label }) => [key, label]),
 );
 
+const SYNC_STATE_LABELS: Record<string, string> = {
+  ok: "已同步",
+  queued: "已排队",
+  waiting_capacity: "等待容量",
+  resolving_identity: "正在识别账号",
+  identity_unresolved: "未找到账号",
+  identity_ambiguous: "账号重名待确认",
+  rate_limited: "平台冷却中",
+  credential_unavailable: "平台凭证暂不可用",
+  upstream_error: "上游暂不可用",
+};
+
 type UnifiedFeedProps = {
+  canManageCredentials?: boolean;
   onSendToChat?: ChatContentAction;
   onDeepAnalysis?: ChatContentAction;
 };
@@ -60,13 +73,16 @@ function bookmarkAsFeedItem(bookmark: SocialBookmark): FeedItem {
   };
 }
 
-export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFeedProps) {
+export default function UnifiedFeed({
+  canManageCredentials = false,
+  onSendToChat,
+  onDeepAnalysis,
+}: UnifiedFeedProps) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [subs, setSubs] = useState<UnifiedSubscription[]>([]);
   const [bookmarks, setBookmarks] = useState<SocialBookmark[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"feed" | "bookmarks">("feed");
-  const [showWechatFallback, setShowWechatFallback] = useState(false);
   const [searchPlatform, setSearchPlatform] = useState("wechat");
   const [searchQuery, setSearchQuery] = useState("");
   const [subscriptionQuery, setSubscriptionQuery] = useState("");
@@ -80,6 +96,7 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
   const [searching, setSearching] = useState(false);
   const [refreshingPublisher, setRefreshingPublisher] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const loadFeed = useCallback(async (publisherId: string | null) => {
     setLoading(true);
@@ -170,7 +187,6 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
       setSearchResults(await searchPublishers(searchPlatform, query));
     } catch (searchError) {
       setError(errorMessage(searchError, "发布者搜索失败"));
-      if (searchPlatform === "wechat") setShowWechatFallback(true);
     } finally {
       setSearching(false);
     }
@@ -184,6 +200,7 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
         external_id: publisher.external_id,
         name: publisher.name,
         avatar: publisher.avatar ?? undefined,
+        provider: publisher.provider,
       });
       setSearchResults([]);
       setSearchQuery("");
@@ -216,8 +233,13 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
     setError("");
     setRefreshingPublisher(publisherId);
     try {
-      await refreshPublisher(publisherId);
-      await loadFeed(selectedPublisher);
+      const queued = await refreshPublisher(publisherId);
+      setNotice(
+        queued.state === "waiting_capacity"
+          ? "当前补缺容量已满，账号会按排队时间自动晋升"
+          : "已加入刷新队列，不会在当前页面直接访问上游",
+      );
+      await loadSubscriptions();
     } catch (refreshError) {
       setError(errorMessage(refreshError, "刷新失败"));
     } finally {
@@ -295,17 +317,6 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
           <Button type="button" variant="outline" size="sm" disabled={!selectedPlatformConfig.searchable || searching || !searchQuery.trim()} onClick={() => void onSearch()}>
             <Search />{searching ? "搜索中…" : "搜索"}
           </Button>
-          {searchPlatform === "wechat" && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-expanded={showWechatFallback}
-              onClick={() => setShowWechatFallback((current) => !current)}
-            >
-              <QrCode />扫码备用
-            </Button>
-          )}
         </div>
 
         {searchResults.length > 0 && (
@@ -343,11 +354,16 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
         {searchPlatform === "weibo" && (
           <WeiboProfileEntry onIntegrated={reloadAfterLegacyIntegration} onError={setError} />
         )}
-        {searchPlatform === "wechat" && showWechatFallback && (
+        {canManageCredentials && searchPlatform === "wechat" && (
           <WechatFallbackEntry onIntegrated={reloadAfterLegacyIntegration} onError={setError} />
         )}
       </div>
 
+      {notice && (
+        <div role="status" className="border-b border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-700">
+          {notice}
+        </div>
+      )}
       {error && (
         <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
           {error}
@@ -398,6 +414,10 @@ export default function UnifiedFeed({ onSendToChat, onDeepAnalysis }: UnifiedFee
                     <span className="block truncate">{subscription.name}</span>
                     <span className="text-[10px] text-muted-foreground">
                       {PLATFORM_LABELS[subscription.platform] ?? subscription.platform}
+                    </span>
+                    <span className="block truncate text-[10px] text-muted-foreground" title={subscription.last_sync_error ?? undefined}>
+                      {SYNC_STATE_LABELS[subscription.sync_state] ?? subscription.sync_state}
+                      {subscription.sync_provider ? ` · ${subscription.sync_provider}` : ""}
                     </span>
                   </button>
                   <button

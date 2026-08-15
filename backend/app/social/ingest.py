@@ -29,7 +29,15 @@ async def get_or_create_account(
     return acc
 
 
-async def ingest_account(db: AsyncSession, account: WechatAccount, cred: ActiveCred, http, count: int = 20) -> int:
+async def ingest_account(
+    db: AsyncSession,
+    account: WechatAccount,
+    cred: ActiveCred,
+    http,
+    count: int = 20,
+    *,
+    commit: bool = True,
+) -> int:
     from app.core.config import get_settings
 
     n = count or get_settings().social_fetch_count
@@ -48,7 +56,10 @@ async def ingest_account(db: AsyncSession, account: WechatAccount, cred: ActiveC
             digest=raw.digest, cover_url=raw.cover_url, url=raw.url, published_at=raw.published_at,
         ))
         added += 1
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return added
 
 

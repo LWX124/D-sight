@@ -43,17 +43,17 @@ def start_scheduler() -> AsyncIOScheduler:
         sync_legacy_weibo_publishers,
     )
 
-    async def _social_unified_job():
+    async def _social_refresh_dispatcher():
         async with get_sessionmaker()() as session:
             result = await refresh_subscribed_publishers(
                 session, get_settings(), include_weibo=False
             )
-        _log.info("unified social poll done: %s", result)
+        _log.info("social refresh dispatcher done: %s", result)
 
     _scheduler.add_job(
-        _social_unified_job,
-        IntervalTrigger(minutes=get_settings().social_unified_poll_minutes),
-        id="social_unified_poll",
+        _social_refresh_dispatcher,
+        IntervalTrigger(minutes=get_settings().social_wechat_dispatch_minutes),
+        id="social_refresh_dispatcher",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

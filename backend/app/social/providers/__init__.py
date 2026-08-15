@@ -2,6 +2,7 @@
 from app.social.providers.base import (
     ItemDTO,
     MetricsDTO,
+    ProviderCoverageGap,
     PublisherDTO,
     SocialProvider,
 )
@@ -10,6 +11,7 @@ from app.social.providers.registry import SUPPORTED_PLATFORMS, get_provider
 __all__ = [
     "ItemDTO",
     "MetricsDTO",
+    "ProviderCoverageGap",
     "PublisherDTO",
     "SUPPORTED_PLATFORMS",
     "SocialProvider",

@@ -16,12 +16,24 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from app.social.providers.base import ItemDTO, MetricsDTO, PublisherDTO, SocialProvider
+from app.social.providers.base import (
+    ItemDTO,
+    MetricsDTO,
+    ProviderCoverageGap,
+    PublisherDTO,
+    SocialProvider,
+)
 from app.social.wechat.parser import html_to_text
 
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://redfox.hk"
+_WECHAT_COVERAGE_GAP_MESSAGES = (
+    "优质库暂未收录",
+    "优质库未收录",
+    "暂未收录",
+    "未查询到该账号",
+)
 
 # 各平台搜索账号的 API 路径
 _SEARCH_ACCOUNT_PATHS = {
@@ -135,6 +147,12 @@ class RedFoxProvider(SocialProvider):
             self._raw_records.append({"platform": platform, "operation": path, "payload": result})
         if not isinstance(result, dict) or result.get("code") != 2000:
             message = result.get("msg", "unknown") if isinstance(result, dict) else "invalid JSON"
+            if (
+                platform == "wechat"
+                and path == _ITEM_LIST_PATHS["wechat"]
+                and any(marker in str(message) for marker in _WECHAT_COVERAGE_GAP_MESSAGES)
+            ):
+                raise ProviderCoverageGap("redfox", platform, str(message))
             raise RuntimeError(f"RedFox API error: {message}")
         data = result.get("data", {})
         return data if isinstance(data, dict) else {"list": data}

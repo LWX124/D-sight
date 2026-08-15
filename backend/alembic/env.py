@@ -26,6 +26,7 @@ from app.social import unified_models as social_unified_models  # noqa: F401
 from app.aihot import models as aihot_models  # noqa: F401
 from app.fund_arb import models as fund_arb_models  # noqa: F401
 from app.deep_analysis import models as deep_analysis_models  # noqa: F401
+from app.diagnosis import models as diagnosis_models  # noqa: F401
 
 if os.environ.get("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])

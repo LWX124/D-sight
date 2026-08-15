@@ -1,5 +1,6 @@
 import json
 import uuid
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -75,3 +76,80 @@ async def test_non_json_response_raises_transient():
     async with http:
         with pytest.raises(TransientMpError):
             await appmsg_publish(http, _cred(), "F1")
+
+
+@pytest.mark.asyncio
+async def test_http_failure_does_not_expose_token_or_cookie():
+    from app.social.wechat.errors import TransientMpError
+
+    secret_cred = ActiveCred(
+        id=uuid.uuid4(),
+        token="secret-query-token",
+        cookies="slave_sid=secret-cookie",
+    )
+    http = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    )
+    async with http:
+        with pytest.raises(TransientMpError) as exc_info:
+            await appmsg_publish(http, secret_cred, "private-fakeid")
+
+    message = str(exc_info.value)
+    assert "secret-query-token" not in message
+    assert "secret-cookie" not in message
+    assert "private-fakeid" not in message
+
+
+@pytest.mark.asyncio
+async def test_fallback_budget_reserves_each_attempt_including_http_failure(
+    monkeypatch,
+):
+    from app.core import config
+    from app.social import budget
+    from app.social.wechat.errors import TransientMpError
+
+    monkeypatch.setattr(
+        config,
+        "get_settings",
+        lambda: SimpleNamespace(social_wechat_fallback_enabled=True),
+    )
+    reservations = 0
+
+    async def reserve() -> int:
+        nonlocal reservations
+        reservations += 1
+        return 49 - reservations
+
+    monkeypatch.setattr(budget, "reserve_wechat_request", reserve)
+    responses = iter(
+        [
+            httpx.Response(200, json={"base_resp": {"ret": 0}, "list": []}),
+            httpx.Response(
+                200,
+                json={
+                    "base_resp": {"ret": 0},
+                    "publish_page": json.dumps(
+                        {"publish_list": [], "total_count": 0}
+                    ),
+                },
+            ),
+            httpx.Response(503),
+        ]
+    )
+    requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return next(responses)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http:
+        await search_biz(http, _cred(), "关键词")
+        await appmsg_publish(http, _cred(), "F1")
+        with pytest.raises(TransientMpError):
+            await appmsg_publish(http, _cred(), "F1")
+
+    assert reservations == 3
+    assert requests == 3

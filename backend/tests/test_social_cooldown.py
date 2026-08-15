@@ -23,6 +23,12 @@ def _auth(user):
     return {"Authorization": f"Bearer {create_access_token(str(user.id))}"}
 
 
+async def _make_admin(db_session, user) -> None:
+    row = await db_session.get(User, user.id)
+    row.role = "admin"
+    await db_session.commit()
+
+
 def _cooldown_seconds() -> int:
     from app.core.config import get_settings
 
@@ -215,6 +221,7 @@ async def test_poll_aborts_on_freq_control(db_session, monkeypatch, fake_cooldow
 # ---- API 层 ----
 @pytest.mark.asyncio
 async def test_refresh_returns_429_when_cooling_down(client, db_session, registered_user, fake_cooldown):
+    await _make_admin(db_session, registered_user)
     fake_cooldown(initial=900)
     acc = WechatAccount(fakeid=f"C{uuid.uuid4().hex[:6]}", name="冷却号")
     db_session.add(acc)
@@ -231,6 +238,7 @@ async def test_refresh_returns_429_when_cooling_down(client, db_session, registe
 @pytest.mark.asyncio
 async def test_refresh_per_account_cooldown(client, db_session, registered_user, monkeypatch, fake_cooldown):
     """同账号连点第二次直接被挡，不产生真实微信请求。"""
+    await _make_admin(db_session, registered_user)
     fake_cooldown()
     acc = WechatAccount(fakeid=f"D{uuid.uuid4().hex[:6]}", name="连点号")
     db_session.add(acc)
@@ -262,6 +270,7 @@ async def test_refresh_per_account_cooldown(client, db_session, registered_user,
 
 @pytest.mark.asyncio
 async def test_refresh_other_ret_reports_real_code(client, db_session, registered_user, monkeypatch, fake_cooldown):
+    await _make_admin(db_session, registered_user)
     fake_cooldown()
     acc = WechatAccount(fakeid=f"E{uuid.uuid4().hex[:6]}", name="错误号")
     db_session.add(acc)

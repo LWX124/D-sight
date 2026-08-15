@@ -66,12 +66,13 @@ describe("social api", () => {
     expect(spy.mock.calls[0][0]).toContain("publisher_id=publisher+id");
   });
 
-  it("refreshPublisher uses the publisher-scoped endpoint", async () => {
+  it("refreshPublisher accepts the publisher-scoped 202 queue contract", async () => {
     const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      new Response(JSON.stringify({ state: "queued", publisher_id: "publisher/id", next_sync_at: null }), { status: 202 }),
     );
-    await refreshPublisher("publisher/id");
+    const queued = await refreshPublisher("publisher/id");
     expect(spy.mock.calls[0][0]).toBe("/api/social/publishers/publisher%2Fid/refresh");
+    expect(queued.state).toBe("queued");
   });
 
   it("addBookmark sends item_id and notes in JSON body", async () => {
@@ -92,9 +93,13 @@ describe("social api", () => {
     const spy = vi.spyOn(api, "apiFetch").mockResolvedValue(
       new Response(JSON.stringify(response), { status: 200 }),
     );
-    await addUnifiedSubscription({ platform: "wechat", external_id: "wx-1", name: "账号" });
+    await addUnifiedSubscription({
+      platform: "wechat", external_id: "wx-1", name: "账号", provider: "redfox",
+    });
     const body = JSON.parse(String((spy.mock.calls[0][1] as RequestInit).body));
-    expect(body).toEqual({ platform: "wechat", external_id: "wx-1", name: "账号" });
+    expect(body).toEqual({
+      platform: "wechat", external_id: "wx-1", name: "账号", provider: "redfox",
+    });
   });
 
   it("getAihot serializes window, semantic category and search", async () => {

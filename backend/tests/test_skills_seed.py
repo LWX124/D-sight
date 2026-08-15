@@ -46,6 +46,23 @@ async def test_upsert_idempotent_and_preserves_ops_fields(db_session):
 
 
 @pytest.mark.asyncio
+async def test_removed_skill_dir_is_delisted(db_session):
+    """目录删掉后若不下架，商店里会留下一个装得上却跑不了的条目。"""
+    await seed.upsert_skills(db_session)
+    ghost = Skill(slug="ghost-skill", name="ghost", description="", body="---\n---\n")
+    db_session.add(ghost)
+    await db_session.flush()
+
+    await seed.upsert_skills(db_session)  # ghost-skill 在 skills_data 里不存在
+
+    assert (await db_session.get(Skill, ghost.id)).is_active is False
+    assert (await db_session.execute(
+        select(Skill).where(Skill.slug == "investment-research")
+    )).scalar_one().is_active is True
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
 async def test_register_auto_installs_defaults(client, db_session):
     await seed.upsert_skills(db_session)
     await db_session.commit()

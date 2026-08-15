@@ -9,6 +9,27 @@ from app.auth.models import User  # noqa: F401 — 注册 FK 目标表
 from app.social.models import WechatArticle
 
 
+@pytest.mark.asyncio
+async def test_scheduler_registers_ten_minute_durable_social_dispatcher(
+    monkeypatch,
+):
+    from app.core import config
+    from app.core.scheduler import start_scheduler, stop_scheduler
+
+    settings = config.get_settings().model_copy(
+        update={"social_wechat_dispatch_minutes": 10}
+    )
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    scheduler = start_scheduler()
+    try:
+        dispatcher = scheduler.get_job("social_refresh_dispatcher")
+        assert dispatcher is not None
+        assert dispatcher.trigger.interval.total_seconds() == 10 * 60
+        assert scheduler.get_job("social_unified_poll") is None
+    finally:
+        stop_scheduler()
+
+
 def _appmsg_handler(aids):
     appmsgex = [{"aid": a, "title": f"T{a}", "digest": "", "cover": "",
                  "link": f"https://mp/s/{a}", "create_time": 1751000000} for a in aids]

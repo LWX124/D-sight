@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import get_current_user
+from app.admin.deps import require_admin
 from app.auth.models import User
 from app.core.db import get_db
 from app.core.config import get_settings
 from app.social.credentials import mark_expired, pick_credential
+from app.social.budget import ProviderBudgetExceeded
 from app.social.ingest import fetch_article_content, get_or_create_account
 from app.social.models import (
     WechatAccount,
@@ -57,9 +58,18 @@ def _transient_http(e: TransientMpError) -> HTTPException:
     return HTTPException(503, f"微信接口调用失败（{e}），请稍后重试")
 
 
+def _budget_http(e: ProviderBudgetExceeded) -> HTTPException:
+    retry_after = max(1, int((e.retry_at - dt.datetime.now(dt.UTC)).total_seconds()))
+    return HTTPException(
+        429,
+        "今日公众号平台请求预算已用完，请明日再试",
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 # ---- 登录 ----
 @router.post("/wechat/login/qrcode")
-async def login_qrcode(user: User = Depends(get_current_user)) -> dict:
+async def login_qrcode(user: User = Depends(require_admin)) -> dict:
     import base64
 
     try:
@@ -72,13 +82,13 @@ async def login_qrcode(user: User = Depends(get_current_user)) -> dict:
 
 @router.get("/wechat/login/status")
 async def login_status(
-    s: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    s: str, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> dict:
     return await poll_status(db, s, user.id)
 
 
 @router.get("/wechat/credentials", response_model=list[CredentialOut])
-async def my_credentials(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def my_credentials(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(
         select(WechatCredential).where(WechatCredential.user_id == user.id)
     )).scalars().all()
@@ -91,7 +101,7 @@ async def my_credentials(user: User = Depends(get_current_user), db: AsyncSessio
 
 @router.delete("/wechat/credentials/{cred_id}")
 async def delete_credential(
-    cred_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    cred_id: uuid.UUID, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> dict:
     c = await db.get(WechatCredential, cred_id)
     if c is None or c.user_id != user.id:
@@ -104,7 +114,7 @@ async def delete_credential(
 # ---- 搜索 / 订阅 ----
 @router.get("/wechat/search")
 async def search(
-    keyword: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    keyword: str, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> list[dict]:
     cred = await pick_credential(db)
     if cred is None:
@@ -117,13 +127,15 @@ async def search(
         raise HTTPException(409, "凭证已失效，请重新扫码登录")
     except FreqControlError as e:
         raise _freq_http(e.retry_after)
+    except ProviderBudgetExceeded as e:
+        raise _budget_http(e)
     except TransientMpError as e:
         raise _transient_http(e)
 
 
 @router.post("/wechat/subscriptions", response_model=SubscriptionOut)
 async def subscribe(
-    body: SubscribeIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    body: SubscribeIn, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     acc = await get_or_create_account(
         db,
@@ -162,7 +174,7 @@ async def subscribe(
 
 
 @router.get("/wechat/subscriptions", response_model=list[SubscriptionOut])
-async def list_subscriptions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_subscriptions(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(
         select(WechatSubscription, WechatAccount)
         .join(WechatAccount, WechatSubscription.account_id == WechatAccount.id)
@@ -177,7 +189,7 @@ async def list_subscriptions(user: User = Depends(get_current_user), db: AsyncSe
 
 @router.delete("/wechat/subscriptions/{sub_id}")
 async def unsubscribe(
-    sub_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    sub_id: uuid.UUID, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> dict:
     sub = await db.get(WechatSubscription, sub_id)
     if sub is None or sub.user_id != user.id:
@@ -203,7 +215,7 @@ async def list_articles(
     account_id: uuid.UUID,
     limit: int = Query(20, ge=1, le=50),
     before: dt.datetime | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(WechatArticle).where(WechatArticle.account_id == account_id)
@@ -216,7 +228,7 @@ async def list_articles(
 
 @router.get("/wechat/articles/{article_id}", response_model=ArticleOut)
 async def get_article(
-    article_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    article_id: uuid.UUID, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     art = await db.get(WechatArticle, article_id)
     if art is None:
@@ -232,7 +244,7 @@ async def get_article(
 
 @router.post("/wechat/refresh")
 async def refresh(
-    account_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    account_id: uuid.UUID, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> dict:
     from app.core.config import get_settings
     from app.social.ingest import ingest_account
@@ -266,6 +278,8 @@ async def refresh(
         raise HTTPException(409, "凭证已失效，请重新扫码登录")
     except FreqControlError as e:
         raise _freq_http(e.retry_after)
+    except ProviderBudgetExceeded as e:
+        raise _budget_http(e)
     except TransientMpError as e:
         raise _transient_http(e)
     return {"added": added}

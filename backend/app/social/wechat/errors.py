@@ -32,7 +32,9 @@ class FreqControlError(TransientMpError):
 def check_base_resp(data: dict) -> dict:
     """校验微信响应；非 0 抛对应异常，成功原样返回 data。"""
     if "base_resp" not in data:
-        raise TransientMpError(f"响应缺少 base_resp: {data}")
+        # The malformed payload may contain fakeids or other provider-only
+        # fields. Keep public/audit errors diagnostic without echoing payloads.
+        raise TransientMpError("响应缺少 base_resp")
     ret = data["base_resp"].get("ret", 0)
     if ret == 0:
         return data

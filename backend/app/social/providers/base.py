@@ -8,6 +8,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 
+class ProviderCoverageGap(Exception):
+    """The provider explicitly says that it does not cover this publisher."""
+
+    def __init__(self, provider: str, platform: str, message: str) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.platform = platform
+        self.code = "provider_coverage_gap"
+
+
 @dataclass
 class PublisherDTO:
     """统一发布者 DTO。"""

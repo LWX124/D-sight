@@ -33,6 +33,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const initial = getInitialTheme();
     setThemeState(initial);
     document.documentElement.setAttribute("data-theme", initial);
+    // 同步 .dark 类，确保 Tailwind dark: 变体生效
+    document.documentElement.classList.toggle("dark", initial === "dark");
     setMounted(true);
   }, []);
 
@@ -40,6 +42,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(newTheme);
     localStorage.setItem("dsight-theme", newTheme);
     document.documentElement.setAttribute("data-theme", newTheme);
+    // 同步 .dark 类
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 
   const toggleTheme = () => {

@@ -6,6 +6,8 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -37,7 +39,13 @@ class SocialPublisher(Base):
     provider_ref: Mapped[str | None] = mapped_column(String(256))
     last_synced_at = mapped_column(DateTime(timezone=True))
     last_sync_status: Mapped[str | None] = mapped_column(String(16))
+    sync_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'queued'")
+    )
+    sync_provider: Mapped[str | None] = mapped_column(String(32))
+    last_sync_error_code: Mapped[str | None] = mapped_column(String(64))
     last_sync_error: Mapped[str | None] = mapped_column(Text)
+    next_sync_at = mapped_column(DateTime(timezone=True))
     platform_metadata: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -57,6 +65,94 @@ class SocialPublisher(Base):
 
     items = relationship("SocialItem", back_populates="publisher", lazy="raise")
     subscriptions = relationship("SocialSubscription", back_populates="publisher", lazy="raise")
+    identities = relationship(
+        "SocialPublisherIdentity", back_populates="publisher", lazy="raise"
+    )
+
+
+class SocialPublisherIdentity(Base):
+    """One upstream identity belonging to a canonical global publisher."""
+
+    __tablename__ = "social_publisher_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    publisher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("social_publishers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'active'")
+    )
+    metadata_json: Mapped[dict] = mapped_column(
+        "metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    next_due_at = mapped_column(DateTime(timezone=True))
+    requested_at = mapped_column(DateTime(timezone=True))
+    waiting_since_at = mapped_column(DateTime(timezone=True))
+    last_attempt_at = mapped_column(DateTime(timezone=True))
+    last_success_at = mapped_column(DateTime(timezone=True))
+    last_checked_at = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    last_error_message: Mapped[str | None] = mapped_column(Text)
+    created_at = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "platform",
+            "external_id",
+            name="uq_social_identity_provider_platform_external",
+        ),
+        CheckConstraint(
+            "status IN ('active','coverage_gap','waiting_capacity',"
+            "'identity_unresolved','identity_ambiguous','disabled')",
+            name="ck_social_identity_status",
+        ),
+        Index("ix_social_identity_publisher", "publisher_id"),
+        Index("ix_social_identity_due", "status", "next_due_at"),
+        Index("ix_social_identity_waiting", "status", "waiting_since_at"),
+    )
+
+    publisher = relationship("SocialPublisher", back_populates="identities")
+
+
+class SocialProviderDailyUsage(Base):
+    """Durable hard limit for real provider requests, including failures."""
+
+    __tablename__ = "social_provider_daily_usage"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    usage_date = mapped_column(Date, nullable=False)
+    request_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    updated_at = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "usage_date", name="uq_social_provider_daily_usage"
+        ),
+        CheckConstraint(
+            "request_count >= 0", name="ck_social_provider_daily_usage_nonnegative"
+        ),
+        Index("ix_social_provider_daily_usage_date", "usage_date"),
+    )
 
 
 class SocialItem(Base):

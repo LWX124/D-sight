@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from app.social.providers.base import ItemDTO
+from app.social.providers.base import ItemDTO, ProviderCoverageGap, PublisherDTO
 from app.social.providers.redfox import RedFoxProvider
 from app.social.providers.wechat_mp import WechatMpProvider
 
@@ -147,4 +147,40 @@ async def test_redfox_wechat_detail_rejects_untrusted_url_before_http_request():
         )
 
     assert requests == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_redfox_explicit_wechat_noncoverage_is_typed():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"code": 4004, "msg": "优质库暂未收录该公众号", "data": None},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = RedFoxProvider("test-key", client=client)
+    with pytest.raises(ProviderCoverageGap) as exc_info:
+        await provider.fetch_publisher_items(
+            PublisherDTO(
+                platform="wechat",
+                external_id="redfox-account",
+                name="未收录账号",
+                provider="redfox",
+            )
+        )
+    assert exc_info.value.code == "provider_coverage_gap"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_redfox_transient_wechat_failure_is_not_a_coverage_gap():
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    )
+    provider = RedFoxProvider("test-key", client=client)
+    with pytest.raises(httpx.HTTPStatusError):
+        await provider.fetch_publisher_items(
+            PublisherDTO(platform="wechat", external_id="a", name="A")
+        )
     await client.aclose()

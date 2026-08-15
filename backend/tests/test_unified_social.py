@@ -14,6 +14,7 @@ from app.social.unified_models import (
     SocialItem,
     SocialItemMetricSnapshot,
     SocialPublisher,
+    SocialPublisherIdentity,
     SocialSubscription,
 )
 from app.social.providers.base import ItemDTO, MetricsDTO
@@ -43,6 +44,340 @@ class _WechatDetailProvider:
             body_text=self.body_text,
             url=item.url,
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_identity_merge_preserves_bookmarks_and_dedupes_subscriptions(
+    db_session,
+):
+    from app.social.identity import bind_publisher_identity, ensure_publisher_identity
+
+    user = User(
+        email=f"identity-merge-{uuid.uuid4().hex}@test.dev",
+        password_hash=hash_password("x"),
+    )
+    canonical = SocialPublisher(
+        platform="wechat",
+        external_id=f"redfox-{uuid.uuid4().hex}",
+        name="同一公众号",
+        provider="redfox",
+    )
+    duplicate = SocialPublisher(
+        platform="wechat",
+        external_id=f"fakeid-{uuid.uuid4().hex}",
+        name="同一公众号",
+        provider="wechat_mp",
+    )
+    db_session.add_all([user, canonical, duplicate])
+    await db_session.flush()
+    await ensure_publisher_identity(
+        db_session,
+        canonical,
+        provider="redfox",
+        external_id=canonical.external_id,
+    )
+    wechat_identity = await ensure_publisher_identity(
+        db_session,
+        duplicate,
+        provider="wechat_mp",
+        external_id=duplicate.external_id,
+    )
+    item = SocialItem(
+        publisher_id=duplicate.id,
+        platform="wechat",
+        external_id=f"merge-item-{uuid.uuid4().hex}",
+        content_type="article",
+        title="保留引用",
+        published_at=dt.datetime.now(dt.UTC),
+    )
+    db_session.add_all(
+        [
+            SocialSubscription(user_id=user.id, publisher_id=canonical.id),
+            SocialSubscription(user_id=user.id, publisher_id=duplicate.id),
+            item,
+        ]
+    )
+    await db_session.flush()
+    bookmark = ContentBookmark(user_id=user.id, item_id=item.id)
+    db_session.add(bookmark)
+    await db_session.commit()
+    item_id = item.id
+    bookmark_id = bookmark.id
+    duplicate_id = duplicate.id
+
+    merged, rebound = await bind_publisher_identity(
+        db_session,
+        canonical,
+        provider="wechat_mp",
+        external_id=wechat_identity.external_id,
+    )
+    await db_session.commit()
+
+    assert merged.id == canonical.id
+    assert rebound.publisher_id == canonical.id
+    assert await db_session.get(SocialPublisher, duplicate_id) is None
+    moved_item = await db_session.get(SocialItem, item_id)
+    assert moved_item.publisher_id == canonical.id
+    preserved = await db_session.get(ContentBookmark, bookmark_id)
+    assert preserved.item_id == item_id
+    subscriptions = (
+        await db_session.execute(
+            select(SocialSubscription).where(SocialSubscription.user_id == user.id)
+        )
+    ).scalars().all()
+    assert [subscription.publisher_id for subscription in subscriptions] == [canonical.id]
+
+
+@pytest.mark.asyncio
+async def test_wechat_identity_requires_one_normalized_exact_match(db_session):
+    from app.social.identity import ensure_publisher_identity, resolve_wechat_identity
+
+    publisher = SocialPublisher(
+        platform="wechat",
+        external_id=f"redfox-{uuid.uuid4().hex}",
+        name="Ｒｕｉｑｉｎ  袁锐钦",
+        provider="redfox",
+    )
+    db_session.add(publisher)
+    await db_session.flush()
+    await ensure_publisher_identity(
+        db_session,
+        publisher,
+        provider="redfox",
+        external_id=publisher.external_id,
+    )
+
+    state, identity = await resolve_wechat_identity(
+        db_session,
+        publisher,
+        [
+            {"fakeid": "fake-a", "nickname": "Ruiqin 袁锐钦"},
+            {"fakeid": "fake-b", "nickname": "Ruiqin 袁锐钦"},
+        ],
+    )
+    assert state == "identity_ambiguous"
+    assert identity is None
+
+    state, identity = await resolve_wechat_identity(
+        db_session,
+        publisher,
+        [{"fakeid": "fake-a", "nickname": "Ruiqin 袁锐钦"}],
+    )
+    assert state == "queued"
+    assert identity.provider == "wechat_mp"
+    assert identity.external_id == "fake-a"
+
+
+@pytest.mark.asyncio
+async def test_wechat_fallback_capacity_waits_then_promotes(db_session):
+    from types import SimpleNamespace
+
+    from app.social.identity import ensure_publisher_identity
+    from app.social.refresh import _claim_fallback_capacity
+
+    user = User(
+        email=f"capacity-{uuid.uuid4().hex}@test.dev",
+        password_hash=hash_password("x"),
+    )
+    active = SocialPublisher(
+        platform="wechat", external_id=f"active-{uuid.uuid4().hex}", name="Active"
+    )
+    waiting = SocialPublisher(
+        platform="wechat", external_id=f"waiting-{uuid.uuid4().hex}", name="Waiting"
+    )
+    db_session.add_all([user, active, waiting])
+    await db_session.flush()
+    active_identity = await ensure_publisher_identity(
+        db_session,
+        active,
+        provider="wechat_mp",
+        external_id=active.external_id,
+    )
+    redfox_identity = await ensure_publisher_identity(
+        db_session,
+        waiting,
+        provider="redfox",
+        external_id=waiting.external_id,
+        status="coverage_gap",
+    )
+    waiting_identity = await ensure_publisher_identity(
+        db_session,
+        waiting,
+        provider="wechat_mp",
+        external_id=f"waiting-fakeid-{uuid.uuid4().hex}",
+    )
+    active_subscription = SocialSubscription(
+        user_id=user.id, publisher_id=active.id, enabled=True
+    )
+    db_session.add_all(
+        [
+            active_subscription,
+            SocialSubscription(user_id=user.id, publisher_id=waiting.id, enabled=True),
+        ]
+    )
+    await db_session.flush()
+
+    other_active_count = await db_session.scalar(
+        select(func.count(func.distinct(SocialPublisherIdentity.publisher_id)))
+        .join(
+            SocialSubscription,
+            SocialSubscription.publisher_id == SocialPublisherIdentity.publisher_id,
+        )
+        .where(
+            SocialPublisherIdentity.provider == "wechat_mp",
+            SocialPublisherIdentity.status == "active",
+            SocialPublisherIdentity.publisher_id != waiting.id,
+            SocialSubscription.enabled.is_(True),
+        )
+    )
+    settings = SimpleNamespace(
+        social_wechat_fallback_capacity=int(other_active_count)
+    )
+    assert not await _claim_fallback_capacity(
+        db_session,
+        waiting,
+        settings,
+        redfox_identity,
+        fallback_identity=waiting_identity,
+    )
+    assert waiting.sync_state == "waiting_capacity"
+    assert waiting_identity.status == "waiting_capacity"
+    assert waiting_identity.waiting_since_at is not None
+    assert redfox_identity.status == "coverage_gap"
+
+    active_subscription.enabled = False
+    active_identity.status = "disabled"
+    await db_session.flush()
+    assert await _claim_fallback_capacity(
+        db_session,
+        waiting,
+        settings,
+        redfox_identity,
+        fallback_identity=waiting_identity,
+    )
+    assert waiting_identity.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_only_typed_redfox_coverage_gap_enters_fallback_routing(
+    db_session, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from app.social import refresh as refresh_module
+    from app.social.identity import ensure_publisher_identity
+    from app.social.providers.base import ProviderCoverageGap
+
+    publisher = SocialPublisher(
+        platform="wechat",
+        external_id=f"typed-gap-{uuid.uuid4().hex}",
+        name="Typed Gap",
+        provider="redfox",
+    )
+    db_session.add(publisher)
+    await db_session.flush()
+    await ensure_publisher_identity(
+        db_session,
+        publisher,
+        provider="redfox",
+        external_id=publisher.external_id,
+    )
+
+    async def coverage_gap(*args, **kwargs):
+        raise ProviderCoverageGap("redfox", "wechat", "优质库暂未收录")
+
+    monkeypatch.setattr(refresh_module, "_refresh_redfox", coverage_gap)
+    count = await refresh_module.refresh_publisher(
+        db_session,
+        publisher,
+        SimpleNamespace(social_wechat_fallback_enabled=False),
+    )
+    assert count == 0
+    assert publisher.sync_state == "upstream_error"
+    assert publisher.last_sync_error_code == "provider_coverage_gap"
+
+    transient_publisher = SocialPublisher(
+        platform="wechat",
+        external_id=f"transient-{uuid.uuid4().hex}",
+        name="Transient",
+        provider="redfox",
+    )
+    db_session.add(transient_publisher)
+    await db_session.flush()
+    await ensure_publisher_identity(
+        db_session,
+        transient_publisher,
+        provider="redfox",
+        external_id=transient_publisher.external_id,
+    )
+
+    async def timeout(*args, **kwargs):
+        raise httpx.ReadTimeout("temporary")
+
+    monkeypatch.setattr(refresh_module, "_refresh_redfox", timeout)
+    with pytest.raises(httpx.ReadTimeout):
+        await refresh_module.refresh_publisher(
+            db_session,
+            transient_publisher,
+            SimpleNamespace(social_wechat_fallback_enabled=True),
+        )
+    wechat_identity = await db_session.scalar(
+        select(SocialPublisherIdentity).where(
+            SocialPublisherIdentity.publisher_id == transient_publisher.id,
+            SocialPublisherIdentity.provider == "wechat_mp",
+        )
+    )
+    assert wechat_identity is None
+
+    # A transient RedFox reprobe must not *create* fallback, but it also must
+    # not block a WeChat identity that was already bound by an earlier typed
+    # coverage gap.
+    user = User(
+        email=f"established-fallback-{uuid.uuid4().hex}@test.dev",
+        password_hash=hash_password("x"),
+    )
+    established = SocialPublisher(
+        platform="wechat",
+        external_id=f"established-{uuid.uuid4().hex}",
+        name="Established",
+        provider="redfox",
+    )
+    db_session.add_all([user, established])
+    await db_session.flush()
+    await ensure_publisher_identity(
+        db_session,
+        established,
+        provider="redfox",
+        external_id=established.external_id,
+        status="coverage_gap",
+    )
+    await ensure_publisher_identity(
+        db_session,
+        established,
+        provider="wechat_mp",
+        external_id=f"established-fakeid-{uuid.uuid4().hex}",
+    )
+    db_session.add(
+        SocialSubscription(user_id=user.id, publisher_id=established.id)
+    )
+    await db_session.flush()
+    fallback_calls = []
+
+    async def established_fallback(*args, **kwargs):
+        fallback_calls.append(args[1].id)
+        return 7
+
+    monkeypatch.setattr(refresh_module, "_refresh_wechat_mp", established_fallback)
+    assert await refresh_module.refresh_publisher(
+        db_session,
+        established,
+        SimpleNamespace(
+            social_wechat_fallback_enabled=True,
+            social_wechat_fallback_capacity=100,
+            redfox_api_key="test",
+        ),
+    ) == 7
+    assert fallback_calls == [established.id]
 
 
 @pytest.mark.asyncio
@@ -652,8 +987,6 @@ async def test_xiaohongshu_account_subscription_fails_explicitly(
 async def test_refresh_is_real_and_publisher_global_across_users(
     client, db_session, registered_user, monkeypatch
 ):
-    from app.social import feed_router
-
     second_user = User(
         email=f"refresh-two-{uuid.uuid4().hex}@test.dev",
         password_hash=hash_password("x"),
@@ -674,46 +1007,27 @@ async def test_refresh_is_real_and_publisher_global_across_users(
     )
     await db_session.commit()
 
-    class FakeRedis:
-        values = {}
-
-        async def set(self, key, value, ex, nx):
-            assert ex == 900 and nx is True
-            if key in self.values:
-                return None
-            self.values[key] = value
-            return True
-
-        async def ttl(self, key):
-            return 899
-
-        async def delete(self, key):
-            self.values.pop(key, None)
-
-        async def aclose(self):
-            return None
-
-    calls = []
-
-    async def fake_refresh(db, refreshed_publisher, settings):
-        calls.append(refreshed_publisher.id)
-        return 3
-
-    monkeypatch.setattr(feed_router.aioredis, "from_url", lambda *args, **kwargs: FakeRedis())
-    monkeypatch.setattr(feed_router, "refresh_publisher", fake_refresh)
     first = await client.post(
         f"/api/social/publishers/{publisher.id}/refresh",
         headers=_auth(registered_user),
     )
+    queued_identity = await db_session.scalar(
+        select(SocialPublisherIdentity).where(
+            SocialPublisherIdentity.publisher_id == publisher.id
+        )
+    )
+    first_requested_at = queued_identity.requested_at
+    assert first_requested_at is not None
     second = await client.post(
         f"/api/social/publishers/{publisher.id}/refresh",
         headers={"Authorization": f"Bearer {create_access_token(str(second_user.id))}"},
     )
-    assert first.status_code == 200
-    assert first.json()["fetched"] == 3
-    assert second.status_code == 429
-    assert calls == [publisher.id]
-
+    assert first.status_code == 202
+    assert first.json()["state"] == "queued"
+    assert second.status_code == 202
+    assert second.json()["state"] == "queued"
+    await db_session.refresh(queued_identity)
+    assert queued_identity.requested_at == first_requested_at
     from types import SimpleNamespace
 
     from app.social import refresh as refresh_module
@@ -728,6 +1042,66 @@ async def test_refresh_is_real_and_publisher_global_across_users(
     stats = await refresh_module.refresh_subscribed_publishers(db_session, SimpleNamespace())
     assert scheduled_calls.count(publisher.id) == 1
     assert stats["items"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rechecks_due_state_after_advisory_lock(
+    db_session, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from app.social import refresh as refresh_module
+
+    future = dt.datetime.now(dt.UTC) + dt.timedelta(days=7)
+    existing_publishers = (
+        await db_session.execute(select(SocialPublisher))
+    ).scalars().all()
+    for existing in existing_publishers:
+        existing.next_sync_at = future
+    user = User(
+        email=f"dispatcher-race-{uuid.uuid4().hex}@test.dev",
+        password_hash=hash_password("x"),
+    )
+    publisher = SocialPublisher(
+        platform="wechat",
+        external_id=f"dispatcher-race-{uuid.uuid4().hex}",
+        name="Dispatcher Race",
+        provider="redfox",
+        next_sync_at=None,
+    )
+    db_session.add_all([user, publisher])
+    await db_session.flush()
+    db_session.add(
+        SocialSubscription(user_id=user.id, publisher_id=publisher.id)
+    )
+    await db_session.commit()
+
+    original_refresh = db_session.refresh
+
+    async def simulate_other_instance_commit(
+        instance, attribute_names=None, **kwargs
+    ):
+        await original_refresh(
+            instance, attribute_names=attribute_names, **kwargs
+        )
+        if instance.id == publisher.id:
+            instance.next_sync_at = future
+
+    upstream_calls = []
+
+    async def unexpected_upstream(*args, **kwargs):
+        upstream_calls.append(args[1].id)
+        return 1
+
+    monkeypatch.setattr(db_session, "refresh", simulate_other_instance_commit)
+    monkeypatch.setattr(refresh_module, "refresh_publisher", unexpected_upstream)
+
+    stats = await refresh_module.refresh_subscribed_publishers(
+        db_session, SimpleNamespace()
+    )
+
+    assert upstream_calls == []
+    assert stats["skipped_not_due"] == 1
 
 
 @pytest.mark.asyncio

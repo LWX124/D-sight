@@ -19,6 +19,7 @@ from app.social.unified_models import (
     SocialItem,
     SocialItemMetricSnapshot,
     SocialPublisher,
+    SocialPublisherIdentity,
     SocialSubscription,
 )
 
@@ -77,6 +78,26 @@ async def upsert_publisher(
         **(dto.platform_metadata or {}),
     }
     publisher.updated_at = now
+    if dto.provider:
+        await db.execute(
+            pg_insert(SocialPublisherIdentity)
+            .values(
+                id=uuid.uuid4(),
+                publisher_id=publisher.id,
+                platform=dto.platform,
+                provider=dto.provider,
+                external_id=dto.external_id,
+                status="active",
+                next_due_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_nothing(
+                constraint="uq_social_identity_provider_platform_external"
+            )
+        )
+        publisher.sync_provider = publisher.sync_provider or dto.provider
+        publisher.next_sync_at = publisher.next_sync_at or now
     if flush:
         await db.flush()
     return publisher

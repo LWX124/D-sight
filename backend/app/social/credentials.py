@@ -10,7 +10,9 @@ from app.social.models import WechatCredential
 from app.social.wechat.client import ActiveCred
 
 
-async def pick_credential(db: AsyncSession) -> ActiveCred | None:
+async def pick_credential(
+    db: AsyncSession, *, commit: bool = True
+) -> ActiveCred | None:
     """挑一个 active 且未过期的凭证；顺手把时间已过的标 expired。池空返 None。"""
     now = dt.datetime.now(dt.UTC)
     rows = (await db.execute(
@@ -28,14 +30,25 @@ async def pick_credential(db: AsyncSession) -> ActiveCred | None:
         except InvalidToken:
             row.status = "expired"
             continue
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         return ActiveCred(id=row.id, token=token, cookies=cookies)
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return None
 
 
-async def mark_expired(db: AsyncSession, cred_id: uuid.UUID) -> None:
+async def mark_expired(
+    db: AsyncSession, cred_id: uuid.UUID, *, commit: bool = True
+) -> None:
     await db.execute(
         update(WechatCredential).where(WechatCredential.id == cred_id).values(status="expired")
     )
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()

@@ -39,9 +39,23 @@ async def _mp_get_json(http: httpx.AsyncClient, endpoint: str, params: dict, cre
     if left > 0:
         raise FreqControlError(f"微信风控冷却中，剩余 {left}s", retry_after=left)
 
+    # The public fallback uses a committed DB reservation as its hard safety
+    # boundary. The reservation intentionally precedes the request and is never
+    # refunded when HTTP/JSON/provider validation fails.
+    if get_settings().social_wechat_fallback_enabled:
+        from app.social.budget import reserve_wechat_request
+
+        await reserve_wechat_request()
+
     p = {**params, "token": cred.token, "lang": "zh_CN", "f": "json", "ajax": "1"}
-    r = await http.get(endpoint, params=p, headers={"Cookie": cred.cookies})
-    r.raise_for_status()
+    try:
+        r = await http.get(endpoint, params=p, headers={"Cookie": cred.cookies})
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        # httpx exception strings include the full request URL. The token is a
+        # query parameter, so never let the original message reach audit logs
+        # or the public subscription error fields.
+        raise TransientMpError("微信接口网络请求失败") from exc
     try:
         data = r.json()
     except json.JSONDecodeError as e:

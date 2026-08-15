@@ -21,6 +21,12 @@ def _auth(user):
     return {"Authorization": f"Bearer {create_access_token(str(user.id))}"}
 
 
+async def _make_admin(db_session, user) -> None:
+    row = await db_session.get(User, user.id)
+    row.role = "admin"
+    await db_session.commit()
+
+
 @pytest.mark.asyncio
 async def test_requires_auth(client):
     r = await client.get("/api/social/wechat/subscriptions")
@@ -28,7 +34,45 @@ async def test_requires_auth(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/social/wechat/login/qrcode"),
+        ("GET", "/api/social/wechat/login/status?s=test-session"),
+        ("GET", "/api/social/wechat/credentials"),
+        ("DELETE", f"/api/social/wechat/credentials/{uuid.uuid4()}"),
+        ("GET", "/api/social/wechat/search?keyword=test"),
+        ("GET", "/api/social/wechat/subscriptions"),
+        ("DELETE", f"/api/social/wechat/subscriptions/{uuid.uuid4()}"),
+        ("GET", f"/api/social/wechat/articles?account_id={uuid.uuid4()}"),
+        ("GET", f"/api/social/wechat/articles/{uuid.uuid4()}"),
+        ("POST", f"/api/social/wechat/refresh?account_id={uuid.uuid4()}"),
+    ],
+)
+async def test_legacy_wechat_management_requires_admin(
+    client, registered_user, method, path
+):
+    response = await client.request(method, path, headers=_auth(registered_user))
+    assert response.status_code == 403
+    assert response.json()["detail"] == "需要管理员权限"
+
+
+@pytest.mark.asyncio
+async def test_legacy_wechat_subscription_write_requires_admin(
+    client, registered_user
+):
+    response = await client.post(
+        "/api/social/wechat/subscriptions",
+        json={"fakeid": "private-fakeid", "name": "平台账号"},
+        headers=_auth(registered_user),
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "需要管理员权限"
+
+
+@pytest.mark.asyncio
 async def test_subscribe_idempotent_and_list(client, db_session, registered_user):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     body = {"fakeid": f"F{uuid.uuid4().hex[:6]}", "name": "投研号", "avatar": None}
     r1 = await client.post("/api/social/wechat/subscriptions", json=body, headers=h)
@@ -47,6 +91,7 @@ async def test_subscribe_idempotent_and_list(client, db_session, registered_user
 async def test_legacy_wechat_subscription_projects_feed_and_deletes_both_directions(
     client, db_session, registered_user
 ):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     fakeid = f"SYNC{uuid.uuid4().hex[:8]}"
     account = WechatAccount(fakeid=fakeid, name="统一公众号")
@@ -120,6 +165,7 @@ async def test_legacy_wechat_subscription_projects_feed_and_deletes_both_directi
 
 @pytest.mark.asyncio
 async def test_list_articles(client, db_session, registered_user):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     acc = WechatAccount(fakeid=f"A{uuid.uuid4().hex[:6]}", name="号X")
     db_session.add(acc)
@@ -136,6 +182,7 @@ async def test_list_articles(client, db_session, registered_user):
 
 @pytest.mark.asyncio
 async def test_article_lazy_fetch(client, db_session, registered_user, monkeypatch):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     acc = WechatAccount(fakeid=f"B{uuid.uuid4().hex[:6]}", name="号Y")
     db_session.add(acc)
@@ -160,6 +207,7 @@ async def test_article_lazy_fetch(client, db_session, registered_user, monkeypat
 
 @pytest.mark.asyncio
 async def test_get_article_refetches_empty_content(client, db_session, registered_user, monkeypatch):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     acc = WechatAccount(fakeid=f"C{uuid.uuid4().hex[:6]}", name="号E")
     db_session.add(acc)
@@ -184,6 +232,7 @@ async def test_get_article_refetches_empty_content(client, db_session, registere
 
 @pytest.mark.asyncio
 async def test_get_article_fetch_failure_returns_503(client, db_session, registered_user, monkeypatch):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     acc = WechatAccount(fakeid=f"D{uuid.uuid4().hex[:6]}", name="号F")
     db_session.add(acc)
@@ -205,6 +254,7 @@ async def test_get_article_fetch_failure_returns_503(client, db_session, registe
 
 @pytest.mark.asyncio
 async def test_search_session_expired_marks_credential(client, db_session, registered_user, monkeypatch):
+    await _make_admin(db_session, registered_user)
     h = _auth(registered_user)
     cred = WechatCredential(
         token=crypto.encrypt("t"), cookies=crypto.encrypt("c"), nickname="号Z",

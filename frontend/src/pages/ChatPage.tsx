@@ -214,6 +214,7 @@ export default function ChatPage() {
           )}
           {activePanel === "social" && (
             <SocialPanel
+              canManageCredentials={currentUser?.role === "admin"}
               onSendToChat={startChatWithContent}
               onDeepAnalysis={startChatWithContent}
             />

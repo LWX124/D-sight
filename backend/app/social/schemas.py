@@ -88,6 +88,7 @@ class UnifiedSubscribeIn(BaseModel):
     external_id: str | None = Field(default=None, min_length=1, max_length=128)
     name: str | None = Field(default=None, min_length=1, max_length=256)
     avatar: str | None = Field(default=None, max_length=1024)
+    provider: str | None = Field(default=None, min_length=1, max_length=32)
 
     @model_validator(mode="after")
     def validate_identity(self) -> "UnifiedSubscribeIn":
@@ -112,6 +113,19 @@ class UnifiedSubscriptionOut(BaseModel):
     name: str
     avatar: str | None
     enabled: bool
+    provider: str | None
+    sync_state: str
+    sync_provider: str | None
+    last_synced_at: str | None
+    last_sync_error_code: str | None
+    last_sync_error: str | None
+    next_sync_at: str | None
+
+
+class PublisherRefreshOut(BaseModel):
+    state: str
+    publisher_id: str
+    next_sync_at: str | None
 
 
 class PublisherSearchOut(BaseModel):

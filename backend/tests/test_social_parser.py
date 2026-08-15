@@ -65,8 +65,9 @@ def test_parse_appmsgpublish_empty_list():
 
 
 def test_check_base_resp_missing_raises_transient():
-    with pytest.raises(TransientMpError):
-        check_base_resp({"x": 1})
+    with pytest.raises(TransientMpError) as exc_info:
+        check_base_resp({"fakeid": "provider-only-secret", "x": 1})
+    assert "provider-only-secret" not in str(exc_info.value)
 
 
 def test_parse_appmsgpublish_missing_publish_page():

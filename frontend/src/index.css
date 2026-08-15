@@ -107,27 +107,27 @@
     --sidebar-ring: #1E40AF;
 }
 
-/* Dark Mode */
+/* Dark Mode — 金融级深色主题，偏暖灰调，有质感 */
 [data-theme="dark"] {
-    --background: #020617;
-    --foreground: #F8FAFC;
-    --card: #0F172A;
-    --card-foreground: #F8FAFC;
-    --popover: #0F172A;
-    --popover-foreground: #F8FAFC;
+    --background: #111318;
+    --foreground: #E8ECF1;
+    --card: #1A1D24;
+    --card-foreground: #E8ECF1;
+    --popover: #1A1D24;
+    --popover-foreground: #E8ECF1;
 
     --primary: #60A5FA;
-    --primary-foreground: #020617;
-    --secondary: #1E293B;
-    --secondary-foreground: #F8FAFC;
-    --muted: #1E293B;
-    --muted-foreground: #94A3B8;
-    --accent: #1E293B;
-    --accent-foreground: #F8FAFC;
+    --primary-foreground: #111318;
+    --secondary: #22262E;
+    --secondary-foreground: #E8ECF1;
+    --muted: #22262E;
+    --muted-foreground: #9CA3B0;
+    --accent: #22262E;
+    --accent-foreground: #E8ECF1;
     --destructive: #F87171;
 
-    --border: #334155;
-    --input: #334155;
+    --border: #2E333C;
+    --input: #2E333C;
     --ring: #60A5FA;
 
     /* 金融涨跌 (暗色模式下更亮) */
@@ -141,35 +141,35 @@
     --chart-4: #4ADE80;
     --chart-5: #F87171;
 
-    --sidebar: #0F172A;
-    --sidebar-foreground: #CBD5E1;
+    --sidebar: #14161B;
+    --sidebar-foreground: #C5CAD3;
     --sidebar-primary: #60A5FA;
-    --sidebar-primary-foreground: #020617;
-    --sidebar-accent: #1E293B;
-    --sidebar-accent-foreground: #F8FAFC;
-    --sidebar-border: #334155;
+    --sidebar-primary-foreground: #111318;
+    --sidebar-accent: #1E2128;
+    --sidebar-accent-foreground: #E8ECF1;
+    --sidebar-border: #2E333C;
     --sidebar-ring: #60A5FA;
 }
 
-/* 保留 .dark 类兼容性 */
+/* 保留 .dark 类兼容性 — 与 [data-theme="dark"] 同步 */
 .dark {
-    --background: #020617;
-    --foreground: #F8FAFC;
-    --card: #0F172A;
-    --card-foreground: #F8FAFC;
-    --popover: #0F172A;
-    --popover-foreground: #F8FAFC;
+    --background: #111318;
+    --foreground: #E8ECF1;
+    --card: #1A1D24;
+    --card-foreground: #E8ECF1;
+    --popover: #1A1D24;
+    --popover-foreground: #E8ECF1;
     --primary: #60A5FA;
-    --primary-foreground: #020617;
-    --secondary: #1E293B;
-    --secondary-foreground: #F8FAFC;
-    --muted: #1E293B;
-    --muted-foreground: #94A3B8;
-    --accent: #1E293B;
-    --accent-foreground: #F8FAFC;
+    --primary-foreground: #111318;
+    --secondary: #22262E;
+    --secondary-foreground: #E8ECF1;
+    --muted: #22262E;
+    --muted-foreground: #9CA3B0;
+    --accent: #22262E;
+    --accent-foreground: #E8ECF1;
     --destructive: #F87171;
-    --border: #334155;
-    --input: #334155;
+    --border: #2E333C;
+    --input: #2E333C;
     --ring: #60A5FA;
     --up: #F87171;
     --down: #4ADE80;
@@ -178,13 +178,13 @@
     --chart-3: #FBBF24;
     --chart-4: #4ADE80;
     --chart-5: #F87171;
-    --sidebar: #0F172A;
-    --sidebar-foreground: #CBD5E1;
+    --sidebar: #14161B;
+    --sidebar-foreground: #C5CAD3;
     --sidebar-primary: #60A5FA;
-    --sidebar-primary-foreground: #020617;
-    --sidebar-accent: #1E293B;
-    --sidebar-accent-foreground: #F8FAFC;
-    --sidebar-border: #334155;
+    --sidebar-primary-foreground: #111318;
+    --sidebar-accent: #1E2128;
+    --sidebar-accent-foreground: #E8ECF1;
+    --sidebar-border: #2E333C;
     --sidebar-ring: #60A5FA;
 }
 
@@ -197,6 +197,13 @@
   }
   html {
     @apply font-sans;
+    font-size: 15px;
+  }
+  @media (min-width: 768px) {
+    html { font-size: 16px; }
+  }
+  @media (min-width: 1280px) {
+    html { font-size: 17px; }
   }
 
   /* 滚动条 */

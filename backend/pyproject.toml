@@ -53,6 +53,10 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "online: 需要真实外网（akshare 上游）的冒烟测试，默认不跑，本地验收用 -m online",
+]
+addopts = "-m 'not online'"
 
 [tool.ruff]
 line-length = 100
